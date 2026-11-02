@@ -102,7 +102,12 @@ jobs:
           else
             cp target/release/prismwarden .prismwarden/dist/
           fi
-          cp LICENSE-MIT LICENSE-APACHE README.md .prismwarden/dist/
+          cp LICENSE-MIT LICENSE-APACHE README.md SECURITY.md CONTRIBUTING.md .prismwarden/dist/
+          cp -R docs .prismwarden/dist/docs
+          rustc -vV > .prismwarden/dist/BUILD-INFO.txt
+          git rev-parse HEAD >> .prismwarden/dist/BUILD-INFO.txt
+          printf 'GitHub run: %s\n' "$GITHUB_RUN_ID" >> .prismwarden/dist/BUILD-INFO.txt
+          python .github/scripts/licenses.py .prismwarden/dist
           python .github/scripts/checksums.py .prismwarden/dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

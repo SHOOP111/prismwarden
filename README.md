@@ -17,19 +17,21 @@ It does **not** validate credentials against providers, execute your project, in
 - **Bounded parallel scanning:** shared regex-set prefilter, entropy gates, deterministic admission, private Rayon pool, capped candidate/report accumulation.
 - **Fail-closed coverage:** oversized, unreadable, non-UTF-8/binary, changed, and truncated input produce visible coverage notices and exit `3` by default.
 - **Auditable policy:** explicit TOML, path/rule allowlists with required reasons, severity overrides, bounded custom Rust-regex rules. No inline suppression directives.
-- **Reviewable baselines:** fingerprint-only JSON; stable across line shifts; credential changes reappear; incomplete scans cannot create baselines.
+- **Reviewable baselines:** fingerprint-only JSON; stable across line shifts; changed token values normally reappear; incomplete scans cannot create baselines. Header-only/path-only identity exceptions are documented.
 - **Four report formats:** terminal-safe text, JSON, SARIF 2.1.0, and escaped Markdown.
 - **Filesystem hygiene:** no symlink traversal during ordinary discovery; regular-file checks; Unix no-follow/nonblocking opens; Windows reparse-point checks; atomic report writes.
 - **GitHub-only build workflow:** Linux, Windows, and macOS tests/builds; formatting, Clippy, documentation, SARIF schema validation, and dependency auditing run on hosted runners.
 
 ## Get a binary without compiling locally
 
+Download the platform ZIP from the [v0.1.0 preview release](https://github.com/SHOOP111/prismwarden/releases/tag/v0.1.0), or use the latest verified CI artifacts:
+
 1. Open [GitHub Actions → CI](https://github.com/SHOOP111/prismwarden/actions/workflows/ci.yml).
 2. Select a successful run for the commit you want.
 3. Download the `prismwarden-ubuntu-latest`, `prismwarden-windows-latest`, or `prismwarden-macos-latest` artifact.
 4. Extract it; verify the included `SHA256SUMS` against the executable. On Unix, you may need `chmod +x prismwarden` after extraction.
 
-Artifacts are runner-native, unsigned binaries with finite retention. Checksums detect accidental corruption; they are **not** independent provenance or signatures. There is no crates.io release yet.
+Binaries are runner-native and unsigned; CI artifacts have finite retention. Packages include `BUILD-INFO.txt`, recursive `SHA256SUMS`, a dependency inventory, available upstream license texts, and the documentation. Checksums detect accidental corruption; they are **not** independent provenance or signatures. The preview release is early-stage software, not an audited production certification. There is no crates.io release yet.
 
 ```text
 prismwarden --help
@@ -99,6 +101,7 @@ Scan a quiescent, trusted snapshot. This is **not a filesystem sandbox against a
 ## Engineering documentation
 
 - [Architecture and performance model](docs/ARCHITECTURE.md)
+- [Measured synthetic throughput and its limitations](docs/PERFORMANCE.md)
 - [Configuration and rule catalog](docs/CONFIGURATION.md)
 - [Threat model and security boundaries](docs/THREAT_MODEL.md)
 - [Remote-only development](CONTRIBUTING.md)

@@ -12,7 +12,7 @@ Review a source checkout, export directory, or deployment bundle **you own or ar
 | Accidental provider contact | No networking dependencies or subprocess execution in the scanner engine | OS/network-mounted file access, dependency resolution, CI and report upload are outside this guarantee |
 | Terminal / Markdown injection | Escape controls, bidi markers, and Markdown punctuation; percent-encode SARIF paths | JSON consumers must escape values appropriately in their own UI |
 | Catastrophic regex backtracking | Rust regex engine, pattern/compiled-size caps | CPU use is workload-dependent; no wall-clock timeout |
-| Memory exhaustion | Bounded files/bytes/workers/candidates/results/notices | Aggressive user-selected budgets, long paths, allocator overhead |
+| Memory exhaustion | Bounded engine-owned files/bytes/workers/candidates/results/notices | Aggressive budgets, long paths, traversal sorting/ignore-rule buffers, allocator overhead |
 | Traversal loops / symlink escape | Skip links/reparse points; final-component no-follow opens | Concurrent hostile ancestor-directory replacement is not contained |
 | FIFO/device hangs | Skip special files; Unix nonblocking opens | Unresponsive filesystems/mounts can still block |
 | Incomplete scan reported as safe | Explicit coverage notices; exit 3 by default; refuse incomplete baselines | Operator may intentionally waive coverage or exclude meaningful input |

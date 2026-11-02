@@ -55,9 +55,9 @@ The crate exposes the same engine used by the CLI. `ScanOptions`, `Config`, and 
 - Coverage notice storage is capped at 512 unique entries; the total count remains visible. File and entry limits stop enormous traversals; directory depth is capped at 64.
 - Correlations use sets/maps and bounded path-ancestor walks, not an all-pairs graph. At most three review hypotheses are emitted, each with at most 16 member fingerprints.
 
-Approximate memory is `O(files × path_length + threads × (file_bytes + per_file_candidates) + retained_findings + compiled_rules)`. Limits are configurable; extreme combinations can still exhaust a small machine. Defaults are conservative for ordinary developer workstations, not a universal memory guarantee.
+Approximate engine-owned memory is `O(files × path_length + threads × (file_bytes + per_file_candidates) + retained_findings + compiled_rules)`. The traversal/ignore libraries add their own storage: sorted traversal can buffer an individual directory, and ignore rules are not covered by the content-byte budget. These are not hard process-RSS limits. Extreme directory fan-out, huge ignore files, or aggressive user-selected budgets can still exhaust a small machine.
 
-Release builds use thin LTO, one codegen unit, and stripped symbols. Performance claims should be measured on a representative corpus; synthetic throughput is not a production benchmark.
+Release builds use thin LTO, one codegen unit, and stripped symbols. Performance claims should be measured on a representative corpus; [the recorded synthetic throughput](PERFORMANCE.md) is not a production benchmark.
 
 ## Identity and determinism
 
