@@ -1,0 +1,34 @@
+name: Remote maintenance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Resolve dependencies on GitHub, not the developer machine
+        run: cargo generate-lockfile
+      - name: Generate a formatting patch on GitHub
+        run: |
+          cargo fmt --all
+          git diff --binary > rustfmt.patch
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: remote-maintenance
+          path: |
+            Cargo.lock
+            rustfmt.patch
+          retention-days: 7
+          if-no-files-found: error

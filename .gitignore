@@ -1,0 +1,12 @@
+/target/
+/.prismwarden/
+/.remote-artifacts/
+*.sarif
+*.profraw
+*.profdata
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
