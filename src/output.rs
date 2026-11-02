@@ -83,6 +83,7 @@ fn text(report: &Report) -> String {
         report.statistics.allowlist_suppressed
     )
     .unwrap();
+    writeln!(out, "{}", scope_summary(report)).unwrap();
     for finding in &report.findings {
         writeln!(
             out,
@@ -141,6 +142,7 @@ fn markdown(report: &Report) -> String {
         report.statistics.files_scanned,
         report.findings.len()
     );
+    writeln!(out, "{}\n", scope_summary(report)).unwrap();
     out.push_str("| Severity | Rule | Location | Finding | Remediation |\n|---|---|---|---|---|\n");
     for finding in &report.findings {
         writeln!(
@@ -232,9 +234,24 @@ pub fn sarif(report: &Report) -> Value {
             "columnKind": "unicodeCodePoints",
             "invocations": [{ "executionSuccessful": report.complete, "toolExecutionNotifications": notifications }],
             "results": results,
-            "properties": { "rulepackDigest": report.rulepack_digest, "complete": report.complete }
+            "properties": {
+                "rulepackDigest": report.rulepack_digest, "complete": report.complete,
+                "scope": report.scope, "highestSeverity": report.highest_severity,
+                "severityCounts": report.severity_counts,
+                "omittedFindings": report.statistics.findings_omitted
+            }
         }]
     })
+}
+
+fn scope_summary(report: &Report) -> String {
+    format!(
+        "Scope: gitignored files {}; {} exclusion globs; {} disabled rules. Highest observed severity: {}. Findings omitted by retention: {}.",
+        if report.scope.include_gitignored { "included" } else { "excluded" },
+        report.scope.excluded_globs.len(), report.scope.disabled_rules.len(),
+        report.highest_severity.map_or_else(|| "none".into(), |s| s.to_string()),
+        report.statistics.findings_omitted,
+    )
 }
 
 fn sarif_level(severity: Severity) -> &'static str {

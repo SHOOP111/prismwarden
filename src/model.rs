@@ -85,14 +85,32 @@ pub struct Correlation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanScope {
+    pub include_gitignored: bool,
+    pub excluded_globs: Vec<String>,
+    pub disabled_rules: Vec<String>,
+    pub allowlist_entries: usize,
+    pub baseline_fingerprints: usize,
+    pub hard_pruned_directories: Vec<String>,
+    pub max_file_bytes: u64,
+    pub max_total_bytes: u64,
+    pub max_files: usize,
+    pub max_findings: usize,
+    pub max_depth: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Report {
     pub schema_version: u32,
     pub tool: String,
     pub version: String,
     pub rulepack_digest: String,
     pub complete: bool,
+    pub scope: ScanScope,
     pub statistics: Statistics,
+    /// Counts include observed findings omitted by the global retention limit.
     pub severity_counts: BTreeMap<String, u64>,
+    pub highest_severity: Option<Severity>,
     pub findings: Vec<Finding>,
     pub correlations: Vec<Correlation>,
     pub notices: Vec<Notice>,
@@ -104,7 +122,7 @@ impl Report {
     pub fn exit_code(&self, threshold: Option<Severity>, allow_incomplete: bool) -> u8 {
         if !self.complete && !allow_incomplete {
             3
-        } else if threshold.is_some_and(|s| self.findings.iter().any(|f| f.severity >= s)) {
+        } else if threshold.is_some_and(|s| self.highest_severity.is_some_and(|found| found >= s)) {
             1
         } else {
             0

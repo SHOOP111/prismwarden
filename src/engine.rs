@@ -1,7 +1,7 @@
 use crate::baseline::Baseline;
 use crate::config::{Config, Policy};
 use crate::correlate;
-use crate::model::{Finding, Notice, Report, SCHEMA_VERSION, Statistics};
+use crate::model::{Finding, Notice, Report, SCHEMA_VERSION, ScanScope, Severity, Statistics};
 use crate::rules::RulePack;
 use anyhow::{Context, Result, ensure};
 use ignore::WalkBuilder;
@@ -58,6 +58,8 @@ struct Work {
 
 struct Accumulator {
     statistics: Statistics,
+    severity_counts: BTreeMap<String, u64>,
+    highest_severity: Option<Severity>,
     findings: BTreeSet<Finding>,
     notices: BTreeSet<Notice>,
     limit: usize,
@@ -85,6 +87,8 @@ impl Accumulator {
             self.notice(&notice.path, &notice.code);
         }
         for finding in result.findings {
+            *self.severity_counts.entry(finding.severity.to_string()).or_insert(0) += 1;
+            self.highest_severity = self.highest_severity.max(Some(finding.severity));
             self.findings.insert(finding);
             if self.findings.len() > self.limit {
                 self.findings.pop_last();
@@ -137,6 +141,8 @@ pub fn scan(options: &ScanOptions, config: &Config, baseline: &Baseline) -> Resu
     let policy = Policy::compile(config, rules.known_ids())?;
     let mut accumulator = Accumulator {
         statistics: Statistics::default(),
+        severity_counts: BTreeMap::new(),
+        highest_severity: None,
         findings: BTreeSet::new(),
         notices: BTreeSet::new(),
         limit: options.max_findings,
@@ -162,21 +168,29 @@ pub fn scan(options: &ScanOptions, config: &Config, baseline: &Baseline) -> Resu
         accumulator.notice(".", "finding_limit");
     }
     let findings: Vec<_> = accumulator.findings.into_iter().collect();
-    let mut severity_counts = BTreeMap::new();
-    for finding in &findings {
-        *severity_counts
-            .entry(finding.severity.to_string())
-            .or_insert(0) += 1;
-    }
     Ok(Report {
         schema_version: SCHEMA_VERSION,
         tool: "prismwarden".into(),
         version: env!("CARGO_PKG_VERSION").into(),
         rulepack_digest: rules.digest.clone(),
         complete: accumulator.statistics.coverage_notices == 0,
+        scope: ScanScope {
+            include_gitignored: options.include_ignored,
+            excluded_globs: config.exclude.clone(),
+            disabled_rules: config.disable_rules.iter().cloned().collect(),
+            allowlist_entries: config.allow.len(),
+            baseline_fingerprints: baseline.fingerprints.len(),
+            hard_pruned_directories: PRUNED.iter().map(|s| (*s).to_string()).collect(),
+            max_file_bytes: options.max_file_bytes,
+            max_total_bytes: options.max_total_bytes,
+            max_files: options.max_files,
+            max_findings: options.max_findings,
+            max_depth: MAX_DEPTH,
+        },
         correlations: correlate::analyze(&findings),
         statistics: accumulator.statistics,
-        severity_counts,
+        severity_counts: accumulator.severity_counts,
+        highest_severity: accumulator.highest_severity,
         findings,
         notices: accumulator.notices.into_iter().collect(),
     })

@@ -1,0 +1,38 @@
+name: Synthetic performance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: performance
+      - name: Record runner and toolchain
+        run: |
+          mkdir -p .prismwarden/performance
+          uname -a > .prismwarden/performance/environment.txt
+          lscpu >> .prismwarden/performance/environment.txt
+          rustc --version >> .prismwarden/performance/environment.txt
+          git rev-parse HEAD >> .prismwarden/performance/environment.txt
+      - name: Measure generated corpus, including setup and discovery per scan
+        run: cargo run --locked --release --example throughput > .prismwarden/performance/measurements.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: synthetic-performance
+          path: .prismwarden/performance/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

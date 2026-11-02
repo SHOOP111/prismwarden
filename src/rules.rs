@@ -120,9 +120,6 @@ impl RulePack {
         text: &str,
         mut emit: impl FnMut(Finding) -> bool,
     ) -> bool {
-        let starts: Vec<usize> = std::iter::once(0)
-            .chain(text.match_indices('\n').map(|(i, _)| i + 1))
-            .collect();
         for index in self.prefilter.matches(text) {
             let rule = &self.rules[self.indices[index]];
             if !rule.applies(path) {
@@ -137,6 +134,9 @@ impl RulePack {
             else {
                 continue;
             };
+            // Captures are monotonic within one rule. Advance a Unicode cursor
+            // once instead of building a line index or rescanning long lines.
+            let (mut offset, mut line, mut column) = (0, 1, 1);
             for captures in regex.captures_iter(text) {
                 let Some(matched) = captures.get(*capture) else {
                     continue;
@@ -151,9 +151,12 @@ impl RulePack {
                 if entropy.is_some_and(|minimum| shannon_entropy(value.as_bytes()) < minimum) {
                     continue;
                 }
-                let line_index = starts.partition_point(|s| *s <= matched.start()) - 1;
-                let column = text[starts[line_index]..matched.start()].chars().count() + 1;
-                let finding = rule.finding(path, line_index + 1, column, value.as_bytes());
+                for ch in text[offset..matched.start()].chars() {
+                    if ch == '\n' { line += 1; column = 1; }
+                    else { column += 1; }
+                }
+                offset = matched.start();
+                let finding = rule.finding(path, line, column, value.as_bytes());
                 if !emit(finding) {
                     return false;
                 }
