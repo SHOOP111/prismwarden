@@ -87,7 +87,10 @@ impl Accumulator {
             self.notice(&notice.path, &notice.code);
         }
         for finding in result.findings {
-            *self.severity_counts.entry(finding.severity.to_string()).or_insert(0) += 1;
+            *self
+                .severity_counts
+                .entry(finding.severity.to_string())
+                .or_insert(0) += 1;
             self.highest_severity = self.highest_severity.max(Some(finding.severity));
             self.findings.insert(finding);
             if self.findings.len() > self.limit {
@@ -442,5 +445,20 @@ fn unix_mode(metadata: &Metadata) -> Option<u32> {
     {
         let _ = metadata;
         None
+    }
+}
+
+#[cfg(all(test, unix))]
+mod path_tests {
+    use super::relative_path;
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    use std::path::Path;
+
+    #[test]
+    fn invalid_utf8_relative_paths_are_never_lossily_normalized() {
+        let root = Path::new("snapshot");
+        let path = root.join(OsString::from_vec(vec![0xff, b'a']));
+        assert!(relative_path(root, &path).is_none());
     }
 }

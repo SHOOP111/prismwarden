@@ -247,9 +247,16 @@ pub fn sarif(report: &Report) -> Value {
 fn scope_summary(report: &Report) -> String {
     format!(
         "Scope: gitignored files {}; {} exclusion globs; {} disabled rules. Highest observed severity: {}. Findings omitted by retention: {}.",
-        if report.scope.include_gitignored { "included" } else { "excluded" },
-        report.scope.excluded_globs.len(), report.scope.disabled_rules.len(),
-        report.highest_severity.map_or_else(|| "none".into(), |s| s.to_string()),
+        if report.scope.include_gitignored {
+            "included"
+        } else {
+            "excluded"
+        },
+        report.scope.excluded_globs.len(),
+        report.scope.disabled_rules.len(),
+        report
+            .highest_severity
+            .map_or_else(|| "none".into(), |s| s.to_string()),
         report.statistics.findings_omitted,
     )
 }

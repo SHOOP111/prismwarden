@@ -152,8 +152,12 @@ impl RulePack {
                     continue;
                 }
                 for ch in text[offset..matched.start()].chars() {
-                    if ch == '\n' { line += 1; column = 1; }
-                    else { column += 1; }
+                    if ch == '\n' {
+                        line += 1;
+                        column = 1;
+                    } else {
+                        column += 1;
+                    }
                 }
                 offset = matched.start();
                 let finding = rule.finding(path, line, column, value.as_bytes());

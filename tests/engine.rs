@@ -569,7 +569,9 @@ fn never_follows_symlinks_or_reads_fifos() {
     assert_eq!(report.statistics.special_files_skipped, 1);
 }
 
-#[cfg(unix)]
+// APFS rejects invalid UTF-8 filenames before the scanner can see them.
+// Lossless relative-path handling is also unit-tested without filesystem I/O.
+#[cfg(target_os = "linux")]
 #[test]
 fn non_utf8_paths_are_reported_not_lossily_collided() {
     use std::ffi::OsString;

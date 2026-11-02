@@ -10,9 +10,21 @@ static RULES: LazyLock<RulePack> = LazyLock::new(|| RulePack::compile(&Config::d
 #[test]
 fn retention_cannot_hide_an_observed_high_severity_finding() {
     let directory = tempfile::tempdir().unwrap();
-    std::fs::write(directory.path().join("a.txt"), ["/home/", "synthetic/project"].concat()).unwrap();
-    std::fs::write(directory.path().join("z.txt"), format!("ghp_{}", "Z".repeat(36))).unwrap();
-    let options = ScanOptions { root: directory.path().into(), max_findings: 1, ..ScanOptions::default() };
+    std::fs::write(
+        directory.path().join("a.txt"),
+        ["/home/", "synthetic/project"].concat(),
+    )
+    .unwrap();
+    std::fs::write(
+        directory.path().join("z.txt"),
+        format!("ghp_{}", "Z".repeat(36)),
+    )
+    .unwrap();
+    let options = ScanOptions {
+        root: directory.path().into(),
+        max_findings: 1,
+        ..ScanOptions::default()
+    };
     let report = scan(&options, &Config::default(), &Baseline::empty()).unwrap();
     assert_eq!(report.findings.len(), 1);
     assert_eq!(report.findings[0].severity, Severity::Low);
@@ -29,11 +41,17 @@ fn dense_single_line_coordinates_do_not_drift() {
     let text = format!("λ{token} ").repeat(1000);
     // A Unicode letter directly preceding a token prevents the word boundary.
     let mut blocked = 0;
-    RULES.inspect_content("a.txt", &text, |_| { blocked += 1; true });
+    RULES.inspect_content("a.txt", &text, |_| {
+        blocked += 1;
+        true
+    });
     assert_eq!(blocked, 0);
     let text = format!("λ {token} ").repeat(1000);
     let mut columns = Vec::new();
-    RULES.inspect_content("a.txt", &text, |finding| { columns.push(finding.column); true });
+    RULES.inspect_content("a.txt", &text, |finding| {
+        columns.push(finding.column);
+        true
+    });
     assert_eq!(columns.len(), 1000);
     for (index, column) in columns.iter().enumerate() {
         assert_eq!(*column, 3 + index * 43);
