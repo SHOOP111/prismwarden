@@ -3,6 +3,7 @@ pub mod baseline;
 pub mod config;
 pub mod correlate;
 pub mod engine;
+mod file_io;
 pub mod model;
 pub mod output;
 pub mod rules;

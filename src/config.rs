@@ -1,9 +1,9 @@
+use crate::file_io;
 use crate::model::{Category, Severity};
 use anyhow::{Context, Result, bail, ensure};
-use globset::{Glob, GlobMatcher, GlobSet, GlobSetBuilder};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::Read;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,40 +56,44 @@ impl Default for Config {
 impl Config {
     /// Configuration is explicit, never auto-loaded from an untrusted scan tree.
     pub fn load(path: &Path) -> Result<Self> {
-        let mut text = String::new();
-        std::fs::File::open(path)
-            .context("cannot open configuration")?
-            .take(1_048_577)
-            .read_to_string(&mut text)
-            .context("configuration must be UTF-8")?;
-        ensure!(text.len() <= 1_048_576, "configuration exceeds 1 MiB");
+        let bytes = file_io::read_input(path, 1_048_576).context("cannot load configuration")?;
+        let text = std::str::from_utf8(&bytes).context("configuration must be UTF-8")?;
+        let text = text.strip_prefix('\u{feff}').unwrap_or(text);
         // TOML diagnostics can echo the source, which might contain secrets.
-        let config: Self = toml::from_str(&text).map_err(|_| {
+        let config: Self = toml::from_str(text).map_err(|_| {
             anyhow::anyhow!("invalid configuration TOML; see docs/CONFIGURATION.md")
         })?;
-        ensure!(
-            config.schema_version == 1,
-            "unsupported configuration schema"
-        );
-        ensure!(
-            config.rules.len() <= 64,
-            "at most 64 custom rules are allowed"
-        );
+        config.validate()?;
         Ok(config)
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
+        ensure!(self.schema_version == 1, "unsupported configuration schema");
+        ensure!(self.rules.len() <= 64, "at most 64 custom rules are allowed");
+        ensure!(
+            self.exclude.len() <= 2048 && self.allow.len() <= 2048,
+            "at most 2048 exclusion globs and 2048 allowlist entries are allowed"
+        );
+        for pattern in self.exclude.iter().chain(self.allow.iter().map(|entry| &entry.path))
+            .chain(self.rules.iter().filter_map(|rule| rule.path.as_ref()))
+        {
+            ensure!(!pattern.is_empty() && pattern.len() <= 4096, "path globs must contain 1-4096 bytes");
+        }
+        for entry in &self.allow {
+            ensure!(entry.reason.len() <= 1024, "allowlist reason exceeds 1024 bytes");
+        }
+        Ok(())
     }
 }
 
 pub struct Policy {
     pub excludes: GlobSet,
-    allow: Vec<(String, GlobMatcher)>,
+    allow: BTreeMap<String, GlobSet>,
 }
 
 impl Policy {
     pub fn compile(config: &Config, known_rules: &BTreeSet<String>) -> Result<Self> {
-        ensure!(
-            config.schema_version == 1,
-            "unsupported configuration schema"
-        );
+        config.validate()?;
         for id in config
             .disable_rules
             .iter()
@@ -105,25 +109,25 @@ impl Policy {
         for pattern in &config.exclude {
             builder.add(Glob::new(pattern).map_err(|_| anyhow::anyhow!("invalid exclusion glob"))?);
         }
-        let mut allow = Vec::new();
+        let mut allow: BTreeMap<String, GlobSetBuilder> = BTreeMap::new();
         for entry in &config.allow {
             if entry.reason.trim().is_empty() {
                 bail!("every allowlist entry requires a nonempty reason");
             }
-            let matcher = Glob::new(&entry.path)
-                .map_err(|_| anyhow::anyhow!("invalid allowlist glob"))?
-                .compile_matcher();
-            allow.push((entry.rule.clone(), matcher));
+            let glob = Glob::new(&entry.path)
+                .map_err(|_| anyhow::anyhow!("invalid allowlist glob"))?;
+            allow.entry(entry.rule.clone()).or_default().add(glob);
         }
         Ok(Self {
-            excludes: builder.build()?,
-            allow,
+            excludes: builder.build().map_err(|_| anyhow::anyhow!("exclusion globs exceed limits"))?,
+            allow: allow.into_iter().map(|(id, builder)| {
+                builder.build().map(|set| (id, set))
+                    .map_err(|_| anyhow::anyhow!("allowlist globs exceed limits"))
+            }).collect::<Result<_>>()?,
         })
     }
 
     pub fn allows(&self, rule: &str, path: &str) -> bool {
-        self.allow
-            .iter()
-            .any(|(id, glob)| id == rule && glob.is_match(path))
+        self.allow.get(rule).is_some_and(|globs| globs.is_match(path))
     }
 }

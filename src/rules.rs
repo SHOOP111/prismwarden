@@ -23,6 +23,7 @@ enum Scope {
     Config,
 }
 
+#[derive(Clone)]
 enum Detector {
     Content {
         regex: Regex,
@@ -37,6 +38,7 @@ enum Detector {
     Permissions,
 }
 
+#[derive(Clone)]
 struct Rule {
     info: RuleInfo,
     detector: Detector,
@@ -44,6 +46,7 @@ struct Rule {
     path: Option<GlobMatcher>,
 }
 
+#[derive(Clone)]
 pub struct RulePack {
     rules: Vec<Rule>,
     prefilter: RegexSet,
@@ -54,10 +57,7 @@ pub struct RulePack {
 
 impl RulePack {
     pub fn compile(config: &Config) -> Result<Self> {
-        ensure!(
-            config.rules.len() <= 64,
-            "at most 64 custom rules are allowed"
-        );
+        config.validate()?;
         let mut rules = builtins()?;
         let mut known: BTreeSet<_> = rules.iter().map(|r| r.info.id.clone()).collect();
         for custom in &config.rules {
@@ -120,6 +120,10 @@ impl RulePack {
         text: &str,
         mut emit: impl FnMut(Finding) -> bool,
     ) -> bool {
+        let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+        // Count raw matches as well as emitted findings: optional/empty captures,
+        // placeholders and entropy rejects must not bypass the CPU-work ceiling.
+        let mut attempts = 0usize;
         for index in self.prefilter.matches(text) {
             let rule = &self.rules[self.indices[index]];
             if !rule.applies(path) {
@@ -138,10 +142,17 @@ impl RulePack {
             // once instead of building a line index or rescanning long lines.
             let (mut offset, mut line, mut column) = (0, 1, 1);
             for captures in regex.captures_iter(text) {
+                attempts += 1;
+                if attempts > 32_768 {
+                    return false;
+                }
                 let Some(matched) = captures.get(*capture) else {
                     continue;
                 };
                 let value = matched.as_str();
+                if value.is_empty() {
+                    continue;
+                }
                 if *unpinned && is_pinned_action(value) {
                     continue;
                 }
@@ -179,7 +190,7 @@ impl RulePack {
         let sensitive_env = (name == ".env" || name.starts_with(".env."))
             && !["example", "sample", "template", "dist"]
                 .iter()
-                .any(|suffix| name.ends_with(suffix));
+                .any(|suffix| name.rsplit_once('.').is_some_and(|(_, last)| last == *suffix));
         let key_store = ["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"].contains(&name.as_str())
             || [".p12", ".pfx", ".kdbx"]
                 .iter()
@@ -221,6 +232,7 @@ impl Rule {
                     || n.to_ascii_lowercase().starts_with("dockerfile.")
             }),
             Scope::Config => {
+                let name = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
                 [
                     ".yml",
                     ".yaml",
@@ -232,11 +244,8 @@ impl Rule {
                     ".properties",
                 ]
                 .iter()
-                .any(|s| path.ends_with(s))
-                    || path
-                        .rsplit('/')
-                        .next()
-                        .is_some_and(|n| n.starts_with(".env"))
+                .any(|s| name.ends_with(s))
+                    || name == ".env" || name.starts_with(".env.")
             }
         }
     }
@@ -440,7 +449,7 @@ fn builtins() -> Result<Vec<Rule>> {
             High,
             Secret,
             rotate,
-            r#"(?im)^[ \t]*(?:export[ \t]+)?["']?(?:[A-Za-z0-9_]*(?:password|passwd|api_key|api_secret|access_token|auth_token|client_secret|secret_key))["']?[ \t]*[:=][ \t]*["']?([A-Za-z0-9/+_=.!@#$%^&*\-]{16,160})"#,
+            r#"(?im)^[ \t]*(?:export[ \t]+|[-{][ \t]*)?["']?(?:[A-Za-z0-9_]*(?:password|passwd|api_key|api_secret|access_token|auth_token|client_secret|secret_key))["']?[ \t]*[:=][ \t]*["']?([A-Za-z0-9/+_=.!@#$%^&*\-]{16,160})"#,
             Any,
         ),
         (
@@ -467,7 +476,7 @@ fn builtins() -> Result<Vec<Rule>> {
             High,
             Secret,
             rotate,
-            r#"(?i)\bauthorization[ \t]*[:=][ \t]*["']?Bearer[ \t]+([A-Za-z0-9._~+/-]{20,300}=*)"#,
+            r#"(?i)\bauthorization["']?[ \t]*[:=][ \t]*["']?Bearer[ \t]+([A-Za-z0-9._~+/-]{20,300}=*)"#,
             Any,
         ),
         (
@@ -476,7 +485,7 @@ fn builtins() -> Result<Vec<Rule>> {
             High,
             Automation,
             "Set top-level permissions to contents: read and grant minimal permissions only to the jobs that need them.",
-            r"(?m)^[ \t]*permissions:[ \t]*write-all[ \t]*(?:#.*)?$",
+            r#"(?mR)^[ \t]*["']?permissions["']?:[ \t]*["']?write-all["']?[ \t]*(?:#.*)?$"#,
             Workflow,
         ),
         (
@@ -485,7 +494,7 @@ fn builtins() -> Result<Vec<Rule>> {
             Medium,
             Automation,
             "Pin external actions to a reviewed full 40-character commit SHA; pin Docker actions by sha256 digest.",
-            r"(?m)^[ \t]*-?[ \t]*uses:[ \t]*([^\s#]+)",
+            r#"(?m)^[ \t]*-?[ \t]*["']?uses["']?:[ \t]*([^\s#]+)"#,
             Workflow,
         ),
         (
@@ -503,7 +512,7 @@ fn builtins() -> Result<Vec<Rule>> {
             Medium,
             Automation,
             "Set persist-credentials: false unless later steps explicitly require authenticated Git operations.",
-            r"(?m)^[ \t]*persist-credentials:[ \t]*true\b",
+            r#"(?im)^[ \t]*["']?persist-credentials["']?:[ \t]*["']?true\b"#,
             Workflow,
         ),
         (
@@ -521,7 +530,7 @@ fn builtins() -> Result<Vec<Rule>> {
             Medium,
             Runtime,
             "Prefer explicit COPY sources and review .dockerignore. A broad copy can include local credentials and private artifacts.",
-            r"(?im)^[ \t]*(?:ADD|COPY)[ \t]+(?:--[^\s]+[ \t]+)*\.[ \t]+",
+            r#"(?im)^[ \t]*(?:ADD|COPY)[ \t]+(?:--[^\s]+[ \t]+)*(?:\./?[ \t]+|\[[ \t]*"\./?"[ \t]*,)"#,
             Docker,
         ),
         (
@@ -530,7 +539,7 @@ fn builtins() -> Result<Vec<Rule>> {
             High,
             Runtime,
             "Remove privileged mode and grant only individually justified capabilities. Apply runtime confinement.",
-            r"(?m)^[ \t]*privileged:[ \t]*true\b",
+            r#"(?im)(?:^|[,{])[ \t]*["']?privileged["']?:[ \t]*["']?true\b"#,
             Config,
         ),
         (
@@ -539,7 +548,7 @@ fn builtins() -> Result<Vec<Rule>> {
             Medium,
             Runtime,
             "Bind to loopback unless external access is required. Verify firewall rules, authentication, and deployment context.",
-            r#"(?im)^[ \t]*(?:host|bind|listen|address)[ \t]*[:=][ \t]*["']?(?:0\.0\.0\.0|::)"#,
+            r#"(?im)(?:^|[,{])[ \t]*["']?(?:host|bind|listen|address)["']?[ \t]*[:=][ \t]*["']?(?:0\.0\.0\.0(?::[0-9]{1,5})?|\[::\](?::[0-9]{1,5})?|::)(?:["'\s,}#]|$)"#,
             Config,
         ),
         (
@@ -548,7 +557,7 @@ fn builtins() -> Result<Vec<Rule>> {
             High,
             Runtime,
             "Enable certificate and hostname verification; install an appropriate trust root instead of bypassing validation.",
-            r#"(?i)\b(?:verify_ssl|ssl_verify|verify_certs|tls_verify|rejectUnauthorized)[ \t]*[:=][ \t]*(?:false|0)\b|\bNODE_TLS_REJECT_UNAUTHORIZED[ \t]*=[ \t]*["']?0"#,
+            r#"(?i)\b(?:verify_ssl|ssl_verify|verify_certs|tls_verify|rejectUnauthorized)["']?[ \t]*[:=][ \t]*["']?(?:false|0)\b|\bNODE_TLS_REJECT_UNAUTHORIZED["']?[ \t]*[:=][ \t]*["']?0\b"#,
             Any,
         ),
         (
@@ -557,7 +566,7 @@ fn builtins() -> Result<Vec<Rule>> {
             Medium,
             Runtime,
             "Verify deployment context and disable debug mode on exposed services. This heuristic does not establish production use.",
-            r#"(?im)^[ \t]*(?:DEBUG|FLASK_DEBUG)[ \t]*[:=][ \t]*["']?(?:true|1)\b"#,
+            r#"(?im)(?:^|[,{])[ \t]*["']?(?:DEBUG|FLASK_DEBUG)["']?[ \t]*[:=][ \t]*["']?(?:true|1)\b"#,
             Config,
         ),
         (

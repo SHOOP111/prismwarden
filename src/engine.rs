@@ -1,16 +1,17 @@
 use crate::baseline::Baseline;
 use crate::config::{Config, Policy};
 use crate::correlate;
+use crate::file_io::{self, is_link};
 use crate::model::{Finding, Notice, Report, SCHEMA_VERSION, ScanScope, Severity, Statistics};
 use crate::rules::RulePack;
 use anyhow::{Context, Result, ensure};
 use ignore::WalkBuilder;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, Metadata, OpenOptions};
-use std::io::Read;
+use std::fs::{self, Metadata};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 const NOTICE_LIMIT: usize = 512;
 const CANDIDATES_PER_FILE: usize = 2048;
@@ -53,7 +54,8 @@ impl Default for ScanOptions {
 struct Work {
     absolute: PathBuf,
     relative: String,
-    reserved: u64,
+    metadata: Metadata,
+    content_notice: Option<&'static str>,
 }
 
 struct Accumulator {
@@ -135,6 +137,7 @@ pub fn scan(options: &ScanOptions, config: &Config, baseline: &Baseline) -> Resu
         (1..=100_000).contains(&options.max_findings),
         "max-findings must be between 1 and 100000"
     );
+    baseline.validate()?;
     let root = options
         .root
         .canonicalize()
@@ -157,8 +160,9 @@ pub fn scan(options: &ScanOptions, config: &Config, baseline: &Baseline) -> Resu
         .build()
         .context("cannot create worker pool")?;
     pool.install(|| {
-        work.par_iter().for_each(|file| {
-            let result = inspect(file, &rules, &policy, baseline);
+        // Regex clones share compiled programs but have independent search caches.
+        work.par_iter().for_each_init(|| rules.clone(), |local_rules, file| {
+            let result = inspect(file, local_rules, &policy, baseline);
             // A worker panic is a fatal process error, never a misleading partial success.
             accumulator
                 .lock()
@@ -205,6 +209,14 @@ fn discover(
     policy: &Policy,
     accumulator: &mut Accumulator,
 ) -> Vec<Work> {
+    if policy.excludes.is_match(".") {
+        accumulator.statistics.excluded_by_policy += 1;
+        return Vec::new();
+    }
+    let excluded = Arc::new(AtomicU64::new(0));
+    let excluded_entries = Arc::clone(&excluded);
+    let excludes = policy.excludes.clone();
+    let filter_root = root.to_path_buf();
     let mut walker = WalkBuilder::new(root);
     walker
         .hidden(false)
@@ -218,12 +230,24 @@ fn discover(
         .max_depth(Some(MAX_DEPTH))
         .add_custom_ignore_filename(".prismwardenignore")
         .sort_by_file_path(|a, b| a.cmp(b))
-        .filter_entry(|entry| {
-            entry.depth() == 0
-                || !entry
-                    .file_name()
-                    .to_str()
-                    .is_some_and(|file| PRUNED.iter().any(|name| file.eq_ignore_ascii_case(name)))
+        .filter_entry(move |entry| {
+            if entry.depth() == 0 {
+                return true;
+            }
+            if entry.file_type().is_some_and(|kind| kind.is_dir())
+                && entry.file_name().to_str().is_some_and(|file| {
+                    PRUNED.iter().any(|name| file.eq_ignore_ascii_case(name))
+                })
+            {
+                return false;
+            }
+            if relative_path(&filter_root, entry.path())
+                .is_some_and(|path| excludes.is_match(path))
+            {
+                excluded_entries.fetch_add(1, Ordering::Relaxed);
+                return false;
+            }
+            true
         });
     let mut work = Vec::new();
     let mut reserved = 0u64;
@@ -250,10 +274,6 @@ fn discover(
         if entry.error().is_some() {
             accumulator.notice(&relative, "ignore_parse_error");
         }
-        if policy.excludes.is_match(&relative) {
-            accumulator.statistics.excluded_by_policy += 1;
-            continue;
-        }
         let metadata = match fs::symlink_metadata(entry.path()) {
             Ok(metadata) => metadata,
             Err(_) => {
@@ -279,21 +299,23 @@ fn discover(
             accumulator.notice(".", "file_limit");
             break;
         }
-        if metadata.len() > options.max_file_bytes {
-            accumulator.notice(&relative, "oversized_file");
-            continue;
-        }
-        if metadata.len() > options.max_total_bytes.saturating_sub(reserved) {
-            accumulator.notice(&relative, "byte_budget");
-            continue;
-        }
-        reserved += metadata.len();
+        let content_notice = if metadata.len() > options.max_file_bytes {
+            Some("oversized_file")
+        } else if metadata.len() > options.max_total_bytes.saturating_sub(reserved) {
+            Some("byte_budget")
+        } else {
+            reserved += metadata.len();
+            None
+        };
+        // Even when content is unaffordable, filename and permission signals matter.
         work.push(Work {
             absolute: entry.path().to_path_buf(),
             relative,
-            reserved: metadata.len(),
+            metadata,
+            content_notice,
         });
     }
+    accumulator.statistics.excluded_by_policy += excluded.load(Ordering::Relaxed);
     accumulator.statistics.files_scheduled = work.len() as u64;
     work
 }
@@ -316,7 +338,7 @@ fn inspect(work: &Work, rules: &RulePack, policy: &Policy, baseline: &Baseline) 
         true
     };
     let metadata = match fs::symlink_metadata(&work.absolute) {
-        Ok(metadata) if metadata.is_file() && !is_link(&metadata) => metadata,
+        Ok(metadata) if file_io::unchanged(&work.metadata, &metadata) => metadata,
         _ => {
             result.notices.push(Notice {
                 path: work.relative.clone(),
@@ -332,8 +354,11 @@ fn inspect(work: &Work, rules: &RulePack, policy: &Policy, baseline: &Baseline) 
         });
         return result;
     }
-    // Finish the closure borrow before reading source bytes.
-    let bytes = match read_regular(work) {
+    if let Some(code) = work.content_notice {
+        result.notices.push(Notice { path: work.relative.clone(), code: code.into() });
+        return result;
+    }
+    let bytes = match file_io::read_snapshot(&work.absolute, &work.metadata) {
         Ok(bytes) => bytes,
         Err(code) => {
             result.notices.push(Notice {
@@ -382,35 +407,6 @@ fn inspect(work: &Work, rules: &RulePack, policy: &Policy, baseline: &Baseline) 
     result
 }
 
-fn read_regular(work: &Work) -> std::result::Result<Vec<u8>, &'static str> {
-    let mut options = OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        // FILE_FLAG_OPEN_REPARSE_POINT: open the reparse point, not its target.
-        options.custom_flags(0x0020_0000);
-    }
-    let file = options.open(&work.absolute).map_err(|_| "read_error")?;
-    let metadata = file.metadata().map_err(|_| "metadata_error")?;
-    if !metadata.is_file() || is_link(&metadata) || metadata.len() != work.reserved {
-        return Err("file_changed");
-    }
-    let mut bytes = Vec::with_capacity(work.reserved as usize);
-    file.take(work.reserved + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "read_error")?;
-    if bytes.len() as u64 != work.reserved {
-        return Err("file_changed");
-    }
-    Ok(bytes)
-}
-
 fn relative_path(root: &Path, path: &Path) -> Option<String> {
     let relative = path.strip_prefix(root).ok()?;
     if relative.as_os_str().is_empty() {
@@ -421,18 +417,6 @@ fn relative_path(root: &Path, path: &Path) -> Option<String> {
         .map(|component| component.as_os_str().to_str())
         .collect::<Option<Vec<_>>>()
         .map(|parts| parts.join("/"))
-}
-
-fn is_link(metadata: &Metadata) -> bool {
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        metadata.file_type().is_symlink() || metadata.file_attributes() & 0x400 != 0
-    }
-    #[cfg(not(windows))]
-    {
-        metadata.file_type().is_symlink()
-    }
 }
 
 fn unix_mode(metadata: &Metadata) -> Option<u32> {

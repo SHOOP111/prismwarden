@@ -1,3 +1,4 @@
+use crate::file_io::is_link;
 use crate::model::{Report, Severity};
 use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
@@ -29,15 +30,19 @@ pub fn render(report: &Report, format: Format) -> Result<Vec<u8>> {
 }
 
 pub fn write_atomic(path: &Path, contents: &[u8], overwrite: bool) -> Result<()> {
-    if let Ok(metadata) = std::fs::symlink_metadata(path) {
-        ensure!(
-            metadata.is_file() && !metadata.file_type().is_symlink(),
-            "output must be a regular file, not a symlink or directory"
-        );
-        ensure!(
-            overwrite,
-            "output already exists; use --force to replace a reviewed baseline"
-        );
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            ensure!(
+                metadata.is_file() && !is_link(&metadata),
+                "output must be a regular file, not a symlink, reparse point, or directory"
+            );
+            ensure!(
+                overwrite,
+                "output already exists; use --force to replace a reviewed baseline"
+            );
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+        Err(_) => anyhow::bail!("cannot inspect output destination"),
     }
     let parent = path
         .parent()
@@ -102,7 +107,7 @@ fn text(report: &Report) -> String {
         writeln!(
             out,
             "\n[review hypothesis] {}: {}\n  {}",
-            correlation.id, correlation.title, correlation.explanation
+            safe_text(&correlation.id), safe_text(&correlation.title), safe_text(&correlation.explanation)
         )
         .unwrap();
     }
@@ -165,7 +170,7 @@ fn markdown(report: &Report) -> String {
         writeln!(
             out,
             "\n### {}: {}\n\n{}",
-            correlation.id, correlation.title, correlation.explanation
+            markdown_escape(&correlation.id), markdown_escape(&correlation.title), markdown_escape(&correlation.explanation)
         )
         .unwrap();
     }
@@ -180,6 +185,9 @@ fn markdown(report: &Report) -> String {
             markdown_escape(&notice.code)
         )
         .unwrap();
+    }
+    if report.statistics.coverage_notices > report.notices.len() as u64 {
+        writeln!(out, "\nAdditional coverage notices omitted; total: {}", report.statistics.coverage_notices).unwrap();
     }
     out.push_str(
         "\nMatched values are omitted. Review paths and fingerprints before sharing this report.\n",
@@ -215,16 +223,22 @@ pub fn sarif(report: &Report) -> Value {
         }}],
         "partialFingerprints": { "prismwarden/v1": finding.fingerprint }
     })).collect();
-    let notifications: Vec<_> = report
+    let mut notifications: Vec<_> = report
         .notices
         .iter()
         .map(|notice| {
             json!({
                 "level": "warning", "descriptor": { "id": notice.code },
-                "message": { "text": format!("{}: {}", safe_text(&notice.path), notice.code) }
+                "message": { "text": format!("{}: {}", safe_text(&notice.path), safe_text(&notice.code)) }
             })
         })
         .collect();
+    if report.statistics.coverage_notices > report.notices.len() as u64 {
+        notifications.push(json!({
+            "level": "warning", "descriptor": { "id": "notice_limit" },
+            "message": { "text": format!("Coverage notices were truncated; total: {}", report.statistics.coverage_notices) }
+        }));
+    }
     json!({
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
@@ -238,7 +252,8 @@ pub fn sarif(report: &Report) -> Value {
                 "rulepackDigest": report.rulepack_digest, "complete": report.complete,
                 "scope": report.scope, "highestSeverity": report.highest_severity,
                 "severityCounts": report.severity_counts,
-                "omittedFindings": report.statistics.findings_omitted
+                "omittedFindings": report.statistics.findings_omitted,
+                "statistics": report.statistics
             }
         }]
     })
@@ -283,7 +298,7 @@ pub fn safe_text(text: &str) -> String {
     let mut output = String::new();
     for ch in text.chars() {
         if ch.is_control()
-            || matches!(ch, '\u{061c}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+            || matches!(ch, '\u{061c}' | '\u{200b}'..='\u{200f}' | '\u{2028}'..='\u{202e}' | '\u{2060}'..='\u{206f}' | '\u{feff}')
         {
             write!(output, "\\u{{{:x}}}", ch as u32).unwrap();
         } else {
