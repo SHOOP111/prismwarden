@@ -69,18 +69,30 @@ impl Config {
 
     pub(crate) fn validate(&self) -> Result<()> {
         ensure!(self.schema_version == 1, "unsupported configuration schema");
-        ensure!(self.rules.len() <= 64, "at most 64 custom rules are allowed");
+        ensure!(
+            self.rules.len() <= 64,
+            "at most 64 custom rules are allowed"
+        );
         ensure!(
             self.exclude.len() <= 2048 && self.allow.len() <= 2048,
             "at most 2048 exclusion globs and 2048 allowlist entries are allowed"
         );
-        for pattern in self.exclude.iter().chain(self.allow.iter().map(|entry| &entry.path))
+        for pattern in self
+            .exclude
+            .iter()
+            .chain(self.allow.iter().map(|entry| &entry.path))
             .chain(self.rules.iter().filter_map(|rule| rule.path.as_ref()))
         {
-            ensure!(!pattern.is_empty() && pattern.len() <= 4096, "path globs must contain 1-4096 bytes");
+            ensure!(
+                !pattern.is_empty() && pattern.len() <= 4096,
+                "path globs must contain 1-4096 bytes"
+            );
         }
         for entry in &self.allow {
-            ensure!(entry.reason.len() <= 1024, "allowlist reason exceeds 1024 bytes");
+            ensure!(
+                entry.reason.len() <= 1024,
+                "allowlist reason exceeds 1024 bytes"
+            );
         }
         Ok(())
     }
@@ -114,20 +126,32 @@ impl Policy {
             if entry.reason.trim().is_empty() {
                 bail!("every allowlist entry requires a nonempty reason");
             }
-            let glob = Glob::new(&entry.path)
-                .map_err(|_| anyhow::anyhow!("invalid allowlist glob"))?;
-            allow.entry(entry.rule.clone()).or_default().add(glob);
+            let glob =
+                Glob::new(&entry.path).map_err(|_| anyhow::anyhow!("invalid allowlist glob"))?;
+            allow
+                .entry(entry.rule.clone())
+                .or_insert_with(GlobSetBuilder::new)
+                .add(glob);
         }
         Ok(Self {
-            excludes: builder.build().map_err(|_| anyhow::anyhow!("exclusion globs exceed limits"))?,
-            allow: allow.into_iter().map(|(id, builder)| {
-                builder.build().map(|set| (id, set))
-                    .map_err(|_| anyhow::anyhow!("allowlist globs exceed limits"))
-            }).collect::<Result<_>>()?,
+            excludes: builder
+                .build()
+                .map_err(|_| anyhow::anyhow!("exclusion globs exceed limits"))?,
+            allow: allow
+                .into_iter()
+                .map(|(id, builder)| {
+                    builder
+                        .build()
+                        .map(|set| (id, set))
+                        .map_err(|_| anyhow::anyhow!("allowlist globs exceed limits"))
+                })
+                .collect::<Result<_>>()?,
         })
     }
 
     pub fn allows(&self, rule: &str, path: &str) -> bool {
-        self.allow.get(rule).is_some_and(|globs| globs.is_match(path))
+        self.allow
+            .get(rule)
+            .is_some_and(|globs| globs.is_match(path))
     }
 }

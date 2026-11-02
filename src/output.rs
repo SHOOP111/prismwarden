@@ -107,7 +107,9 @@ fn text(report: &Report) -> String {
         writeln!(
             out,
             "\n[review hypothesis] {}: {}\n  {}",
-            safe_text(&correlation.id), safe_text(&correlation.title), safe_text(&correlation.explanation)
+            safe_text(&correlation.id),
+            safe_text(&correlation.title),
+            safe_text(&correlation.explanation)
         )
         .unwrap();
     }
@@ -170,7 +172,9 @@ fn markdown(report: &Report) -> String {
         writeln!(
             out,
             "\n### {}: {}\n\n{}",
-            markdown_escape(&correlation.id), markdown_escape(&correlation.title), markdown_escape(&correlation.explanation)
+            markdown_escape(&correlation.id),
+            markdown_escape(&correlation.title),
+            markdown_escape(&correlation.explanation)
         )
         .unwrap();
     }
@@ -187,7 +191,12 @@ fn markdown(report: &Report) -> String {
         .unwrap();
     }
     if report.statistics.coverage_notices > report.notices.len() as u64 {
-        writeln!(out, "\nAdditional coverage notices omitted; total: {}", report.statistics.coverage_notices).unwrap();
+        writeln!(
+            out,
+            "\nAdditional coverage notices omitted; total: {}",
+            report.statistics.coverage_notices
+        )
+        .unwrap();
     }
     out.push_str(
         "\nMatched values are omitted. Review paths and fingerprints before sharing this report.\n",

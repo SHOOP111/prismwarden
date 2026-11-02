@@ -190,7 +190,10 @@ impl RulePack {
         let sensitive_env = (name == ".env" || name.starts_with(".env."))
             && !["example", "sample", "template", "dist"]
                 .iter()
-                .any(|suffix| name.rsplit_once('.').is_some_and(|(_, last)| last == *suffix));
+                .any(|suffix| {
+                    name.rsplit_once('.')
+                        .is_some_and(|(_, last)| last == *suffix)
+                });
         let key_store = ["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"].contains(&name.as_str())
             || [".p12", ".pfx", ".kdbx"]
                 .iter()
@@ -245,7 +248,8 @@ impl Rule {
                 ]
                 .iter()
                 .any(|s| name.ends_with(s))
-                    || name == ".env" || name.starts_with(".env.")
+                    || name == ".env"
+                    || name.starts_with(".env.")
             }
         }
     }

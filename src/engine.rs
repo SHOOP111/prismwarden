@@ -161,14 +161,17 @@ pub fn scan(options: &ScanOptions, config: &Config, baseline: &Baseline) -> Resu
         .context("cannot create worker pool")?;
     pool.install(|| {
         // Regex clones share compiled programs but have independent search caches.
-        work.par_iter().for_each_init(|| rules.clone(), |local_rules, file| {
-            let result = inspect(file, local_rules, &policy, baseline);
-            // A worker panic is a fatal process error, never a misleading partial success.
-            accumulator
-                .lock()
-                .expect("result lock poisoned")
-                .merge(result);
-        });
+        work.par_iter().for_each_init(
+            || rules.clone(),
+            |local_rules, file| {
+                let result = inspect(file, local_rules, &policy, baseline);
+                // A worker panic is a fatal process error, never a misleading partial success.
+                accumulator
+                    .lock()
+                    .expect("result lock poisoned")
+                    .merge(result);
+            },
+        );
     });
     let mut accumulator = accumulator.into_inner().expect("result lock poisoned");
     if accumulator.statistics.findings_omitted > 0 {
@@ -235,14 +238,14 @@ fn discover(
                 return true;
             }
             if entry.file_type().is_some_and(|kind| kind.is_dir())
-                && entry.file_name().to_str().is_some_and(|file| {
-                    PRUNED.iter().any(|name| file.eq_ignore_ascii_case(name))
-                })
+                && entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|file| PRUNED.iter().any(|name| file.eq_ignore_ascii_case(name)))
             {
                 return false;
             }
-            if relative_path(&filter_root, entry.path())
-                .is_some_and(|path| excludes.is_match(path))
+            if relative_path(&filter_root, entry.path()).is_some_and(|path| excludes.is_match(path))
             {
                 excluded_entries.fetch_add(1, Ordering::Relaxed);
                 return false;
@@ -355,7 +358,10 @@ fn inspect(work: &Work, rules: &RulePack, policy: &Policy, baseline: &Baseline) 
         return result;
     }
     if let Some(code) = work.content_notice {
-        result.notices.push(Notice { path: work.relative.clone(), code: code.into() });
+        result.notices.push(Notice {
+            path: work.relative.clone(),
+            code: code.into(),
+        });
         return result;
     }
     let bytes = match file_io::read_snapshot(&work.absolute, &work.metadata) {

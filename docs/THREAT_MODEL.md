@@ -14,7 +14,8 @@ Review a source checkout, export directory, or deployment bundle **you own or ar
 | Catastrophic regex backtracking | Rust regex engine, pattern/compiled-size caps | CPU use is workload-dependent; no wall-clock timeout |
 | Memory exhaustion | Bounded engine-owned files/bytes/workers/candidates/results/notices | Aggressive budgets, long paths, traversal sorting/ignore-rule buffers, allocator overhead |
 | Traversal loops / symlink escape | Skip links/reparse points; final-component no-follow opens | Concurrent hostile ancestor-directory replacement is not contained |
-| FIFO/device hangs | Skip special files; Unix nonblocking opens | Unresponsive filesystems/mounts can still block |
+| FIFO/device hangs | Skip special files; Unix nonblocking opens; explicit policy/baseline files must also be regular and non-symlink | Unresponsive filesystems/mounts can still block |
+| Concurrent file changes | Compare metadata before/after reads, check pathname again, compare Unix device/inode/change time | Not an immutable-content guarantee; same-metadata rewrites and hostile ancestor replacement remain outside scope |
 | Incomplete scan reported as safe | Explicit coverage notices; exit 3 by default; refuse incomplete baselines | Operator may intentionally waive coverage or exclude meaningful input |
 | Malicious target policy | No implicit TOML policy loading; no inline suppressions | Target ignore files still influence declared scope |
 | Report clobbering | Same-directory temporary file, symlink rejection, atomic persistence | Destination ancestors and ACLs must be trusted; filesystem crash semantics vary |

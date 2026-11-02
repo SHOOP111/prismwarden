@@ -84,8 +84,8 @@ pub(crate) fn read_snapshot(
 
 /// Explicit policy inputs must not block on FIFOs/devices or follow final links.
 pub(crate) fn read_input(path: &Path, limit: u64) -> Result<Vec<u8>> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| anyhow::anyhow!("cannot inspect input file"))?;
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| anyhow::anyhow!("cannot inspect input file"))?;
     ensure!(
         metadata.is_file() && !is_link(&metadata),
         "input must be a regular file, not a symlink or special file"
