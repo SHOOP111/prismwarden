@@ -4,7 +4,10 @@ use tempfile::TempDir;
 
 fn cli(directory: &TempDir, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_prismwarden"))
-        .current_dir(directory.path()).args(args).output().unwrap()
+        .current_dir(directory.path())
+        .args(args)
+        .output()
+        .unwrap()
 }
 
 fn seed(directory: &TempDir) {
@@ -30,7 +33,10 @@ fn cli_thresholds_and_machine_output() {
     assert_eq!(output.status.code(), Some(1));
     assert!(serde_json::from_slice::<serde_json::Value>(&output.stdout).is_ok());
     assert!(output.stderr.is_empty());
-    assert_eq!(cli(&dir, &["scan", ".", "--fail-on", "none"]).status.code(), Some(0));
+    assert_eq!(
+        cli(&dir, &["scan", ".", "--fail-on", "none"]).status.code(),
+        Some(0)
+    );
 }
 
 #[test]
@@ -39,8 +45,16 @@ fn baseline_roundtrip_and_no_accidental_overwrite() {
     seed(&dir);
     assert_eq!(cli(&dir, &["baseline", "create"]).status.code(), Some(0));
     assert_eq!(cli(&dir, &["baseline", "create"]).status.code(), Some(2));
-    assert_eq!(cli(&dir, &["scan", "--baseline", ".prismwarden/baseline.json"]).status.code(), Some(0));
-    assert_eq!(cli(&dir, &["baseline", "create", "--force"]).status.code(), Some(0));
+    assert_eq!(
+        cli(&dir, &["scan", "--baseline", ".prismwarden/baseline.json"])
+            .status
+            .code(),
+        Some(0)
+    );
+    assert_eq!(
+        cli(&dir, &["baseline", "create", "--force"]).status.code(),
+        Some(0)
+    );
 }
 
 #[test]
@@ -48,7 +62,10 @@ fn incomplete_scans_never_create_a_baseline() {
     let dir = TempDir::new().unwrap();
     fs::write(dir.path().join("binary"), [0, 1, 2]).unwrap();
     assert_eq!(cli(&dir, &["scan"]).status.code(), Some(3));
-    assert_eq!(cli(&dir, &["scan", "--allow-incomplete"]).status.code(), Some(0));
+    assert_eq!(
+        cli(&dir, &["scan", "--allow-incomplete"]).status.code(),
+        Some(0)
+    );
     assert_eq!(cli(&dir, &["baseline", "create"]).status.code(), Some(3));
     assert!(!dir.path().join(".prismwarden/baseline.json").exists());
 }
@@ -57,27 +74,59 @@ fn incomplete_scans_never_create_a_baseline() {
 fn invalid_root_flags_and_policy_are_operational_errors() {
     let dir = TempDir::new().unwrap();
     assert_eq!(cli(&dir, &["scan", "not-present"]).status.code(), Some(2));
-    assert_eq!(cli(&dir, &["scan", "--threads", "0"]).status.code(), Some(2));
-    assert_eq!(cli(&dir, &["scan", "--max-findings", "0"]).status.code(), Some(2));
-    assert_eq!(cli(&dir, &["scan", "--invalid-flag"]).status.code(), Some(2));
+    assert_eq!(
+        cli(&dir, &["scan", "--threads", "0"]).status.code(),
+        Some(2)
+    );
+    assert_eq!(
+        cli(&dir, &["scan", "--max-findings", "0"]).status.code(),
+        Some(2)
+    );
+    assert_eq!(
+        cli(&dir, &["scan", "--invalid-flag"]).status.code(),
+        Some(2)
+    );
     fs::write(dir.path().join("policy.toml"), "unknown = true").unwrap();
-    assert_eq!(cli(&dir, &["scan", "--config", "policy.toml"]).status.code(), Some(2));
+    assert_eq!(
+        cli(&dir, &["scan", "--config", "policy.toml"])
+            .status
+            .code(),
+        Some(2)
+    );
 }
 
 #[test]
 fn scan_does_not_auto_load_a_policy_from_the_target() {
     let dir = TempDir::new().unwrap();
     seed(&dir);
-    fs::write(dir.path().join("prismwarden.toml"), "disable_rules = [\"SEC001\"]").unwrap();
+    fs::write(
+        dir.path().join("prismwarden.toml"),
+        "disable_rules = [\"SEC001\"]",
+    )
+    .unwrap();
     assert_eq!(cli(&dir, &["scan"]).status.code(), Some(1));
-    assert_eq!(cli(&dir, &["scan", "--config", "prismwarden.toml"]).status.code(), Some(0));
+    assert_eq!(
+        cli(&dir, &["scan", "--config", "prismwarden.toml"])
+            .status
+            .code(),
+        Some(0)
+    );
 }
 
 #[test]
 fn output_is_atomic_and_stdout_stays_empty() {
     let dir = TempDir::new().unwrap();
     seed(&dir);
-    let output = cli(&dir, &["scan", "--format", "sarif", "--output", ".prismwarden/report.sarif"]);
+    let output = cli(
+        &dir,
+        &[
+            "scan",
+            "--format",
+            "sarif",
+            "--output",
+            ".prismwarden/report.sarif",
+        ],
+    );
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
     let bytes = fs::read(dir.path().join(".prismwarden/report.sarif")).unwrap();

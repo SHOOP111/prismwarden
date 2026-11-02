@@ -64,10 +64,17 @@ impl Config {
             .context("configuration must be UTF-8")?;
         ensure!(text.len() <= 1_048_576, "configuration exceeds 1 MiB");
         // TOML diagnostics can echo the source, which might contain secrets.
-        let config: Self = toml::from_str(&text)
-            .map_err(|_| anyhow::anyhow!("invalid configuration TOML; see docs/CONFIGURATION.md"))?;
-        ensure!(config.schema_version == 1, "unsupported configuration schema");
-        ensure!(config.rules.len() <= 64, "at most 64 custom rules are allowed");
+        let config: Self = toml::from_str(&text).map_err(|_| {
+            anyhow::anyhow!("invalid configuration TOML; see docs/CONFIGURATION.md")
+        })?;
+        ensure!(
+            config.schema_version == 1,
+            "unsupported configuration schema"
+        );
+        ensure!(
+            config.rules.len() <= 64,
+            "at most 64 custom rules are allowed"
+        );
         Ok(config)
     }
 }
@@ -79,9 +86,20 @@ pub struct Policy {
 
 impl Policy {
     pub fn compile(config: &Config, known_rules: &BTreeSet<String>) -> Result<Self> {
-        ensure!(config.schema_version == 1, "unsupported configuration schema");
-        for id in config.disable_rules.iter().chain(config.severity.keys()).chain(config.allow.iter().map(|a| &a.rule)) {
-            ensure!(known_rules.contains(id), "policy references an unknown rule ID");
+        ensure!(
+            config.schema_version == 1,
+            "unsupported configuration schema"
+        );
+        for id in config
+            .disable_rules
+            .iter()
+            .chain(config.severity.keys())
+            .chain(config.allow.iter().map(|a| &a.rule))
+        {
+            ensure!(
+                known_rules.contains(id),
+                "policy references an unknown rule ID"
+            );
         }
         let mut builder = GlobSetBuilder::new();
         for pattern in &config.exclude {
@@ -97,10 +115,15 @@ impl Policy {
                 .compile_matcher();
             allow.push((entry.rule.clone(), matcher));
         }
-        Ok(Self { excludes: builder.build()?, allow })
+        Ok(Self {
+            excludes: builder.build()?,
+            allow,
+        })
     }
 
     pub fn allows(&self, rule: &str, path: &str) -> bool {
-        self.allow.iter().any(|(id, glob)| id == rule && glob.is_match(path))
+        self.allow
+            .iter()
+            .any(|(id, glob)| id == rule && glob.is_match(path))
     }
 }

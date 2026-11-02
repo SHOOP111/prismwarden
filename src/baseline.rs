@@ -14,19 +14,28 @@ pub struct Baseline {
 }
 
 impl Default for Baseline {
-    fn default() -> Self { Self::empty() }
+    fn default() -> Self {
+        Self::empty()
+    }
 }
 
 impl Baseline {
     pub fn empty() -> Self {
-        Self { schema_version: SCHEMA_VERSION, fingerprints: BTreeSet::new() }
+        Self {
+            schema_version: SCHEMA_VERSION,
+            fingerprints: BTreeSet::new(),
+        }
     }
 
     pub fn from_report(report: &Report) -> Result<Self> {
         ensure!(report.complete, "refusing to baseline an incomplete scan");
         Ok(Self {
             schema_version: SCHEMA_VERSION,
-            fingerprints: report.findings.iter().map(|f| f.fingerprint.clone()).collect(),
+            fingerprints: report
+                .findings
+                .iter()
+                .map(|f| f.fingerprint.clone())
+                .collect(),
         })
     }
 
@@ -38,11 +47,22 @@ impl Baseline {
             .read_to_end(&mut bytes)
             .context("cannot read baseline")?;
         ensure!(bytes.len() <= 8_388_608, "baseline exceeds 8 MiB");
-        let baseline: Self = serde_json::from_slice(&bytes)
-            .map_err(|_| anyhow::anyhow!("invalid baseline JSON"))?;
-        ensure!(baseline.schema_version == SCHEMA_VERSION, "unsupported baseline schema");
-        ensure!(baseline.fingerprints.len() <= 100_000, "baseline has too many entries");
-        ensure!(baseline.fingerprints.iter().all(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())), "invalid baseline fingerprint");
+        let baseline: Self =
+            serde_json::from_slice(&bytes).map_err(|_| anyhow::anyhow!("invalid baseline JSON"))?;
+        ensure!(
+            baseline.schema_version == SCHEMA_VERSION,
+            "unsupported baseline schema"
+        );
+        ensure!(
+            baseline.fingerprints.len() <= 100_000,
+            "baseline has too many entries"
+        );
+        ensure!(
+            baseline.fingerprints.iter().all(|s| s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())),
+            "invalid baseline fingerprint"
+        );
         Ok(baseline)
     }
 

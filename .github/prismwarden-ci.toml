@@ -1,0 +1,7 @@
+# Explicit policy for auditing the scanner's own public source.
+schema_version = 1
+
+[[allow]]
+rule = "RUN004"
+path = "tests/engine.rs"
+reason = "Synthetic positive fixture for the TLS-verification detector; never executed as application configuration"

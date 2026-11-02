@@ -16,12 +16,16 @@ pub enum Severity {
 
 impl fmt::Display for Severity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            Self::Low => "low",
-            Self::Medium => "medium",
-            Self::High => "high",
-            Self::Critical => "critical",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Low => "low",
+                Self::Medium => "medium",
+                Self::High => "high",
+                Self::Critical => "critical",
+            }
+        )
     }
 }
 

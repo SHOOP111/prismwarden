@@ -87,13 +87,22 @@ struct Input {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-enum Threshold { Low, Medium, High, Critical, None }
+enum Threshold {
+    Low,
+    Medium,
+    High,
+    Critical,
+    None,
+}
 
 impl Threshold {
     fn severity(self) -> Option<Severity> {
         match self {
-            Self::Low => Some(Severity::Low), Self::Medium => Some(Severity::Medium),
-            Self::High => Some(Severity::High), Self::Critical => Some(Severity::Critical), Self::None => None,
+            Self::Low => Some(Severity::Low),
+            Self::Medium => Some(Severity::Medium),
+            Self::High => Some(Severity::High),
+            Self::Critical => Some(Severity::Critical),
+            Self::None => None,
         }
     }
 }
@@ -101,14 +110,21 @@ impl Threshold {
 impl Input {
     fn options(&self) -> ScanOptions {
         ScanOptions {
-            root: self.path.clone(), include_ignored: self.include_ignored,
-            threads: self.threads.unwrap_or_else(|| ScanOptions::default().threads),
-            max_file_bytes: self.max_file_bytes, max_total_bytes: self.max_total_bytes,
-            max_files: self.max_files, max_findings: self.max_findings,
+            root: self.path.clone(),
+            include_ignored: self.include_ignored,
+            threads: self
+                .threads
+                .unwrap_or_else(|| ScanOptions::default().threads),
+            max_file_bytes: self.max_file_bytes,
+            max_total_bytes: self.max_total_bytes,
+            max_files: self.max_files,
+            max_findings: self.max_findings,
         }
     }
 
-    fn policy(&self) -> Result<Config> { load_config(self.config.as_ref()) }
+    fn policy(&self) -> Result<Config> {
+        load_config(self.config.as_ref())
+    }
 }
 
 fn load_config(path: Option<&PathBuf>) -> Result<Config> {
@@ -117,34 +133,66 @@ fn load_config(path: Option<&PathBuf>) -> Result<Config> {
 
 fn run(cli: Cli) -> Result<u8> {
     match cli.command {
-        Command::Scan { input, format, output, baseline, fail_on, allow_incomplete } => {
-            let baseline = baseline.map_or_else(|| Ok(Baseline::empty()), |p| Baseline::load(&p))?;
+        Command::Scan {
+            input,
+            format,
+            output,
+            baseline,
+            fail_on,
+            allow_incomplete,
+        } => {
+            let baseline =
+                baseline.map_or_else(|| Ok(Baseline::empty()), |p| Baseline::load(&p))?;
             let report = scan(&input.options(), &input.policy()?, &baseline)?;
             let bytes = output::render(&report, format)?;
-            if let Some(path) = output { output::write_atomic(&path, &bytes, true)?; }
-            else { stdout(&bytes)?; }
+            if let Some(path) = output {
+                output::write_atomic(&path, &bytes, true)?;
+            } else {
+                stdout(&bytes)?;
+            }
             Ok(report.exit_code(fail_on.severity(), allow_incomplete))
         }
-        Command::Baseline { command: BaselineCommand::Create { input, output, force } } => {
+        Command::Baseline {
+            command:
+                BaselineCommand::Create {
+                    input,
+                    output,
+                    force,
+                },
+        } => {
             let report = scan(&input.options(), &input.policy()?, &Baseline::empty())?;
             if !report.complete {
                 stdout(&output::render(&report, Format::Text)?)?;
-                eprintln!("Baseline not written: scan coverage is incomplete. Review exclusions or increase the budgets.");
+                eprintln!(
+                    "Baseline not written: scan coverage is incomplete. Review exclusions or increase the budgets."
+                );
                 return Ok(3);
             }
             let baseline = Baseline::from_report(&report)?;
             output::write_atomic(&output, &serde_json::to_vec_pretty(&baseline)?, force)?;
-            eprintln!("Baseline written with {} fingerprints. Review every suppression before committing.", baseline.fingerprints.len());
+            eprintln!(
+                "Baseline written with {} fingerprints. Review every suppression before committing.",
+                baseline.fingerprints.len()
+            );
             Ok(0)
         }
         Command::Rules { config, json } => {
             let config = load_config(config.as_ref())?;
             let rules = RulePack::compile(&config)?;
             prismwarden::config::Policy::compile(&config, rules.known_ids())?;
-            if json { stdout(&serde_json::to_vec_pretty(&rules.catalog())?)?; }
-            else {
+            if json {
+                stdout(&serde_json::to_vec_pretty(&rules.catalog())?)?;
+            } else {
                 for rule in rules.catalog() {
-                    stdout(format!("{}\t{}\t{}\n", output::safe_text(&rule.id), rule.severity, output::safe_text(&rule.title)).as_bytes())?;
+                    stdout(
+                        format!(
+                            "{}\t{}\t{}\n",
+                            output::safe_text(&rule.id),
+                            rule.severity,
+                            output::safe_text(&rule.title)
+                        )
+                        .as_bytes(),
+                    )?;
                 }
             }
             Ok(0)

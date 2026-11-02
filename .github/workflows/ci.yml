@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Formatting, Clippy, docs, SARIF
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: quality
+      - name: Formatting
+        id: formatting
+        run: cargo fmt --all -- --check
+      - name: Prepare remote formatting patch
+        if: failure() && steps.formatting.outcome == 'failure'
+        run: |
+          cargo fmt --all
+          mkdir -p .prismwarden
+          git diff --binary > .prismwarden/rustfmt.patch
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure() && steps.formatting.outcome == 'failure'
+        with:
+          name: remote-formatting
+          path: .prismwarden/rustfmt.patch
+          include-hidden-files: true
+          retention-days: 7
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: Documentation
+        run: cargo doc --locked --no-deps
+      - name: Validate SARIF against the pinned official schema
+        run: |
+          python -m pip install jsonschema==4.26.0
+          python .github/scripts/validate_sarif.py
+      - name: Audit this source tree
+        run: cargo run --locked -- scan . --config .github/prismwarden-ci.toml --format json --output .prismwarden/self-audit.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: audit-reports
+          path: |
+            .prismwarden/self-audit.json
+            .prismwarden/schema-report.sarif
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+
+  test-build:
+    name: Test and build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      RUST_BACKTRACE: 1
+      PROPTEST_CASES: 256
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Unit, integration, property, and CLI tests
+        run: cargo test --locked --all-targets --all-features
+      - name: Documentation tests
+        run: cargo test --locked --doc
+      - name: Optimized release binary
+        run: cargo build --locked --release
+      - name: Package executable and checksums
+        shell: bash
+        run: |
+          mkdir -p .prismwarden/dist
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp target/release/prismwarden.exe .prismwarden/dist/
+          else
+            cp target/release/prismwarden .prismwarden/dist/
+          fi
+          cp LICENSE-MIT LICENSE-APACHE README.md .prismwarden/dist/
+          python .github/scripts/checksums.py .prismwarden/dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: prismwarden-${{ matrix.os }}
+          path: .prismwarden/dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+
+  msrv:
+    name: Minimum Rust 1.85
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.85.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: msrv
+      - run: cargo check --locked --all-targets
