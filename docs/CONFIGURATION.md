@@ -2,7 +2,7 @@
 
 ## Trust model
 
-Policy is loaded **only** with `--config PATH`. A target repository cannot silently disable rules by adding `prismwarden.toml`. However, ignore files are part of the declared discovery scope: review them on untrusted trees, and consider `--include-ignored`. That flag does not bypass `.prismwardenignore` or hard-pruned directories.
+Policy is loaded **only** with `--config PATH`. A target repository cannot silently disable rules by adding `prismwarden.toml`. However, ignore files are part of the declared discovery scope: review them on untrusted trees. `--include-ignored` bypasses Git ignore rules only; `--no-ignore` bypasses all target ignore files, including `.prismwardenignore`. Neither bypasses explicit policy exclusions or hard-pruned directories. Ignored-file definitions are still ordinary scan inputs when their paths are in scope.
 
 Unknown TOML fields, unknown rule IDs, duplicate custom IDs, invalid regexes/globs, missing allowlist reasons, and unsupported schemas are errors. Configuration files must be regular, non-symlink UTF-8 files (an initial UTF-8 BOM is accepted), no larger than 1 MiB. Explicit policy and baseline inputs reject special files and reparse points rather than blocking on pipes or devices. Syntax diagnostics deliberately do not echo raw configuration lines. Library scans validate programmatically supplied schemas, fingerprints, and resource limits too.
 
@@ -32,7 +32,11 @@ capture = 1
 path = "documents/**"
 ```
 
-Relative paths always use `/`. Globs match relative entries; a matching directory is pruned together with its descendants. Use `directory` to prune that directory directly, or `directory/**` to exclude its contents. `excluded_by_policy` counts matched entries, not every descendant of a pruned subtree. Matching is case-sensitive except built-in artifact basenames and runtime configuration extensions. Explicit exclusions are intentional scope reductions and do not mark coverage incomplete.
+Relative paths always use `/`. Globs use the same explicit semantics for exclusions, allowlists, and custom-rule paths on every platform: `*` and `?` do not cross `/`, `**` is recursive, and backslash escapes metacharacters rather than acting as a Windows separator. `*.txt` matches files directly below the root; use `**/*.txt` for all depths. `fixtures/*.txt` does not allowlist `fixtures/nested/file.txt`; use `fixtures/**/*.txt` if recursive suppression is intentional.
+
+**Migration note:** earlier preview code used globset defaults, where `*` could cross directories and backslash behavior varied by platform. Review existing policies; replace broad patterns with explicit `**` where needed. Narrower matching may surface previously suppressed findings, intentionally.
+
+Globs match relative entries; a matching directory is pruned together with its descendants. Use `directory` to prune that directory directly, or `directory/**` to exclude its contents. `excluded_by_policy` counts matched entries, not every descendant of a pruned subtree. Matching is case-sensitive except built-in artifact basenames and runtime configuration extensions. Explicit exclusions are intentional scope reductions and do not mark coverage incomplete.
 
 Allowlist entries suppress a particular rule on matching paths. No regular-expression value allowlist or inline source directive exists. Keep allowlists narrow and protected by review. Disabling a rule is also a scope reduction, not a remediation.
 
@@ -44,6 +48,7 @@ Custom patterns use [Rust regex syntax](https://docs.rs/regex/latest/regex/#synt
 
 | Flag | Default | Validation / behavior |
 |---|---:|---|
+| `--no-ignore` | false | bypass Git/custom ignore files; explicit exclusions and hard pruning remain |
 | `--threads` | available CPUs, at most 8 | 1–64; private pool |
 | `--max-file-bytes` | 2,097,152 | 1–67,108,864 |
 | `--max-total-bytes` | 268,435,456 | positive; admitted content budget |
@@ -68,7 +73,7 @@ List authoritative active metadata with `prismwarden rules --json` (add `--confi
 | SEC006 | high | Google API key shape |
 | SEC007 | medium | JWT shape; not decoded or signature-validated |
 | SEC008 | high | Credentials in common service/HTTP URLs |
-| SEC009 | high | High-entropy assigned secret names |
+| SEC009 | high | High-entropy assigned secret names, including camelCase, AWS secret-access keys, and compact JSON assignments |
 | SEC010 | high | PyPI upload token shape |
 | SEC011 | high | npm token shape |
 | SEC012 | high | High-entropy literal bearer authorization |
@@ -76,7 +81,7 @@ List authoritative active metadata with `prismwarden rules --json` (add `--confi
 | CI002 | medium | External action not pinned to full commit/digest |
 | CI003 | high | Privileged pull-request trigger, requiring review |
 | CI004 | medium | Checkout credential persistence explicitly enabled |
-| CI005 | high | Untrusted event expression in a workflow |
+| CI005 | high | Selected untrusted event/head-ref expressions, including expression fallbacks and commit-message/author fields |
 | RUN001 | medium | Broad Docker COPY/ADD, including `./` and JSON-array sources |
 | RUN002 | high | Privileged container setting |
 | RUN003 | medium | All-interface bind address |
@@ -97,6 +102,8 @@ Exact placeholder matching is intentionally narrow. A value is not exempt merely
 ## Baseline semantics
 
 Baseline JSON contains only `schema_version` and sorted `fingerprints`. A baseline is loaded explicitly. It is not tied to absolute checkout paths or line numbers. File renames and changed matched evidence normally produce new identities; header-only and path-only rules are exceptions, as explained in [architecture](ARCHITECTURE.md).
+
+Baseline creation also checks report schema, coverage/retention counters, notice consistency, entry count, and fingerprint syntax when called through the library. A caller cannot turn a visibly truncated report into a baseline merely by setting `complete = true`. These checks do not authenticate externally fabricated reports.
 
 The baseline does not include reports, source code, or raw values. It still deserves access control and review. A committed baseline can be abused to hide existing debt if changes are not protected by code review.
 

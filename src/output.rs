@@ -276,7 +276,11 @@ fn scope_summary(report: &Report) -> String {
         } else {
             "excluded"
         },
-        if report.scope.no_ignore { "bypassed" } else { "respected" },
+        if report.scope.no_ignore {
+            "bypassed"
+        } else {
+            "respected"
+        },
         report.scope.excluded_globs.len(),
         report.scope.disabled_rules.len(),
         report

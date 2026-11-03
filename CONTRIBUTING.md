@@ -40,10 +40,14 @@ Copy the generated `Cargo.lock` into the repository, review it, apply the format
 ## Checks
 
 - Stable Rust on Linux, Windows, and macOS: unit, integration, property, CLI, and doctests; optimized release compilation.
-- Declared minimum Rust: locked all-target check.
+- Declared minimum Rust: locked unit, integration, property, CLI, example, and documentation tests, not only a type check.
+- Workflows: version-pinned actionlint validates expressions and shell commands.
 - Quality: rustfmt, Clippy with warnings denied, rustdoc with warnings denied, independent SARIF schema validation, self-audit of this repository.
 - Security: pinned `cargo-audit` with warnings denied, backed by the current RustSec database. This check intentionally changes as advisories evolve.
-- Synthetic tests cover all built-in detectors, redaction, Unicode coordinates, baseline drift, context filters, custom-rule validation, deterministic parallel truncation, resource gates, ignore semantics, CLI exit codes, output clobber protection, and Unix symlink/FIFO behavior.
+- Distribution helpers: streaming/recursive checksum correctness and cross-platform newline stability; deterministic inventory ordering; declared-license handling; source/destination confinement; symlink and filename-ambiguity rejection.
+- Synthetic tests cover all built-in detectors, redaction, Unicode coordinates, baseline drift, context filters, custom-rule validation, deterministic parallel truncation, resource gates, ignore semantics, CLI exit codes, output clobber protection, consistent directory-aware policy globs, ignore bypass scope, mixed CR/LF coordinates, baseline report consistency, notice truncation, Unix symlink/FIFO behavior, and Windows directory junctions.
+
+The [repository-wide review](docs/REVIEW.md) records the scope of the latest hardening pass and remaining limitations. Benchmark changes should retain raw repeated samples and compare the same harness/corpus, not a single best-case measurement.
 
 No coverage percentage, fuzz-campaign result, formal verification, or reproducible-build claim is made without corresponding measurement.
 

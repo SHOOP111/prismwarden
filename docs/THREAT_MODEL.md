@@ -11,16 +11,16 @@ Review a source checkout, export directory, or deployment bundle **you own or ar
 | Source secrets in reports | Findings omit raw matches and snippets | Paths, custom descriptions, and fingerprints remain sensitive |
 | Accidental provider contact | No networking dependencies or subprocess execution in the scanner engine | OS/network-mounted file access, dependency resolution, CI and report upload are outside this guarantee |
 | Terminal / Markdown injection | Escape controls, bidi markers, and Markdown punctuation; percent-encode SARIF paths | JSON consumers must escape values appropriately in their own UI |
-| Catastrophic regex backtracking | Rust regex engine, pattern/compiled-size caps | CPU use is workload-dependent; no wall-clock timeout |
+| Catastrophic regex backtracking | Rust regex engine, pattern/compiled-size caps, raw-match cap | Iterative searches can still be quadratic on some workloads; no wall-clock timeout |
 | Memory exhaustion | Bounded engine-owned files/bytes/workers/candidates/results/notices | Aggressive budgets, long paths, traversal sorting/ignore-rule buffers, allocator overhead |
 | Traversal loops / symlink escape | Skip links/reparse points; final-component no-follow opens | Concurrent hostile ancestor-directory replacement is not contained |
 | FIFO/device hangs | Skip special files; Unix nonblocking opens; explicit policy/baseline files must also be regular and non-symlink | Unresponsive filesystems/mounts can still block |
 | Concurrent file changes | Compare metadata before/after reads, check pathname again, compare Unix device/inode/change time | Not an immutable-content guarantee; same-metadata rewrites and hostile ancestor replacement remain outside scope |
 | Incomplete scan reported as safe | Explicit coverage notices; exit 3 by default; refuse incomplete baselines | Operator may intentionally waive coverage or exclude meaningful input |
-| Malicious target policy | No implicit TOML policy loading; no inline suppressions | Target ignore files still influence declared scope |
+| Malicious target policy | No implicit TOML policy loading; no inline suppressions; explicit `--no-ignore` bypass for target ignore files | Default scope still respects target ignore files; explicit policy and hard-pruned directories still reduce scope |
 | Report clobbering | Same-directory temporary file, symlink rejection, atomic persistence | Destination ancestors and ACLs must be trusted; filesystem crash semantics vary |
 | Credential guessing from fingerprints | Domain-separated, length-delimited BLAKE3 | Public unkeyed digest is not confidentiality; low-entropy evidence is guessable |
-| Supply-chain drift | Checked-in lockfile, pinned Actions, minimal permissions, scheduled RustSec checks | Hosted runners, registries, toolchains, upstream maintainers remain trusted |
+| Supply-chain drift | Checked-in lockfile, pinned Actions/tooling, minimal permissions, workflow lint, scheduled RustSec checks | Hosted runners, registries, toolchains, upstream maintainers remain trusted |
 
 ## Explicit non-goals
 
@@ -44,7 +44,7 @@ These are review prompts, never proof of compromise. They do not independently a
 
 ## Responsible operation
 
-1. Scan a trusted snapshot and inspect scope/exclusions first.
+1. Scan a trusted snapshot and inspect scope/exclusions first. For untrusted ignore definitions, consider `--no-ignore` and review the resulting expanded scope.
 2. Treat credential-shaped findings as potentially live until reviewed privately.
 3. Revoke exposed credentials before rewriting repository history or creating a baseline.
 4. Investigate incomplete coverage; do not blindly add `--allow-incomplete` to CI.

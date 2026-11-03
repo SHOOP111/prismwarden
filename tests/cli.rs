@@ -119,7 +119,10 @@ fn no_ignore_is_an_explicit_cli_scope_change() {
     seed(&dir);
     fs::write(dir.path().join(".prismwardenignore"), "key.txt\n").unwrap();
     assert_eq!(cli(&dir, &["scan"]).status.code(), Some(0));
-    assert_eq!(cli(&dir, &["scan", "--include-ignored"]).status.code(), Some(0));
+    assert_eq!(
+        cli(&dir, &["scan", "--include-ignored"]).status.code(),
+        Some(0)
+    );
     let output = cli(&dir, &["scan", "--no-ignore", "--format", "json"]);
     assert_eq!(output.status.code(), Some(1));
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();

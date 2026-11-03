@@ -31,6 +31,7 @@ enum Detector {
         capture: usize,
         entropy: Option<f64>,
         unpinned: bool,
+        assigned: bool,
     },
     Env,
     State,
@@ -127,6 +128,7 @@ impl RulePack {
                 capture,
                 entropy,
                 unpinned,
+                assigned,
             } = &rule.detector
             else {
                 continue;
@@ -147,6 +149,12 @@ impl RulePack {
                     continue;
                 }
                 if *unpinned && is_pinned_action(value) {
+                    continue;
+                }
+                if *assigned
+                    && is_environment_reference(value)
+                    && !text[..matched.start()].ends_with(['\'', '"'])
+                {
                     continue;
                 }
                 if rule.info.category == Category::Secret && is_placeholder(value) {
@@ -232,9 +240,15 @@ fn pack_digest(config: &Config, rules: &[Rule]) -> Result<String> {
     }
     for rule in rules {
         let detector = match &rule.detector {
-            Detector::Content { regex, capture, entropy, unpinned } => json!({
+            Detector::Content {
+                regex,
+                capture,
+                entropy,
+                unpinned,
+                assigned,
+            } => json!({
                 "kind": "content", "pattern": regex.as_str(), "capture": capture,
-                "entropy": entropy, "unpinned": unpinned,
+                "entropy": entropy, "unpinned": unpinned, "assigned": assigned,
             }),
             Detector::Env => json!("env"),
             Detector::State => json!("state"),
@@ -328,6 +342,7 @@ fn pattern_rule(
             capture: 0,
             entropy: None,
             unpinned: false,
+            assigned: false,
         },
         scope,
         path: None,
@@ -631,6 +646,7 @@ fn builtins() -> Result<Vec<Rule>> {
             capture,
             entropy,
             unpinned,
+            assigned,
             ..
         } = &mut rule.detector
         {
@@ -644,6 +660,7 @@ fn builtins() -> Result<Vec<Rule>> {
                 *entropy = Some(3.3);
             }
             *unpinned = id == "CI002";
+            *assigned = id == "SEC009";
         }
         rules.push(rule);
     }
@@ -738,6 +755,20 @@ fn is_placeholder(value: &str) -> bool {
     .any(|p| value.eq_ignore_ascii_case(p))
 }
 
+/// Exclude only well-known, unquoted environment-property expressions, not
+/// strings containing "env" or quoted literal credentials with these prefixes.
+fn is_environment_reference(value: &str) -> bool {
+    ["process.env.", "import.meta.env."]
+        .iter()
+        .filter_map(|prefix| value.strip_prefix(prefix))
+        .any(|property| {
+            property.starts_with(|ch: char| ch.is_ascii_alphabetic() || ch == '_')
+                && property
+                    .bytes()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == b'_')
+        })
+}
+
 fn is_pinned_action(value: &str) -> bool {
     let value = value.trim_matches(['\'', '"']);
     if value.starts_with("./") {
@@ -779,17 +810,25 @@ mod tests {
         let config = Config::default();
         let original = builtins().unwrap();
         let digest = pack_digest(&config, &original).unwrap();
-        for change in 0..5 {
+        for change in 0..6 {
             let mut rules = original.clone();
             if change == 0 {
                 rules[0].scope = Scope::Workflow;
             } else if change == 4 {
                 rules[0].detector = Detector::Permissions;
-            } else if let Detector::Content { capture, entropy, unpinned, .. } = &mut rules[0].detector {
+            } else if let Detector::Content {
+                capture,
+                entropy,
+                unpinned,
+                assigned,
+                ..
+            } = &mut rules[0].detector
+            {
                 match change {
                     1 => *capture = 1,
                     2 => *entropy = Some(3.0),
-                    _ => *unpinned = true,
+                    3 => *unpinned = true,
+                    _ => *assigned = true,
                 }
             }
             assert_ne!(digest, pack_digest(&config, &rules).unwrap());

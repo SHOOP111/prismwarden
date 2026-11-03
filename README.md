@@ -20,7 +20,7 @@ It does **not** validate credentials against providers, execute your project, in
 - **Reviewable baselines:** fingerprint-only JSON; stable across line shifts; changed token values normally reappear; incomplete scans cannot create baselines. Header-only/path-only identity exceptions are documented.
 - **Four report formats:** terminal-safe text, JSON, SARIF 2.1.0, and escaped Markdown.
 - **Filesystem hygiene:** no symlink traversal during ordinary discovery; regular-file checks; Unix no-follow/nonblocking opens; Windows reparse-point checks; atomic report writes.
-- **GitHub-only build workflow:** Linux, Windows, and macOS tests/builds; formatting, Clippy, documentation, SARIF schema validation, and dependency auditing run on hosted runners.
+- **GitHub-only build workflow:** Linux, Windows, and macOS tests/builds; minimum-Rust tests, workflow lint, formatting, Clippy, documentation, SARIF schema validation, packaging-helper tests, and dependency auditing run on hosted runners.
 
 ## Get a binary without compiling locally
 
@@ -38,6 +38,7 @@ prismwarden --help
 prismwarden rules
 prismwarden scan ./project
 prismwarden scan ./project --include-ignored --format json --output .prismwarden/report.json
+prismwarden scan ./project --no-ignore --format json --output .prismwarden/full-scope.json
 prismwarden scan ./project --format sarif --output .prismwarden/report.sarif
 prismwarden scan ./project --format markdown --output .prismwarden/report.md
 ```
@@ -88,7 +89,7 @@ See [configuration](docs/CONFIGURATION.md) for custom rules and resource control
 
 ## Scope and honest limitations
 
-Default scope is regular UTF-8 text files, including hidden files, subject to `.gitignore`, repository `.git/info/exclude`, `.prismwardenignore`, explicit exclusions, and hard-pruned directories. `--include-ignored` bypasses Git ignore rules only. Parent/global ignore files are not imported. `.git`, `.hg`, `.svn`, `target`, `node_modules`, `.venv`, and `.prismwarden` are always pruned below the root.
+Default scope is regular UTF-8 text files, including hidden files, subject to `.gitignore`, repository `.git/info/exclude`, `.prismwardenignore`, explicit exclusions, and hard-pruned directories. `--include-ignored` bypasses Git ignore rules only. `--no-ignore` bypasses **all target-controlled ignore files**, including `.prismwardenignore`; explicit policy exclusions and hard pruning still apply. Use it when reviewing an untrusted tree's default scope. Parent/global ignore files are not imported. `.git`, `.hg`, `.svn`, `target`, `node_modules`, `.venv`, and `.prismwarden` are always pruned below the root.
 
 “Complete” means **complete within this declared scope**, not every file on disk. Symlinks and special files are intentionally outside scope and counted. Binary/non-UTF-8 files receive filename checks but produce coverage notices because content was not inspected. Archives, images, PDFs, office documents, Git history, UTF-16, ACLs, alternate streams, and live process memory are not decoded or audited.
 
@@ -102,6 +103,7 @@ Scan a quiescent, trusted snapshot. This is **not a filesystem sandbox against a
 
 - [Architecture and performance model](docs/ARCHITECTURE.md)
 - [Measured synthetic throughput and its limitations](docs/PERFORMANCE.md)
+- [Repository-wide review, fixes, and remaining limitations](docs/REVIEW.md)
 - [Configuration and rule catalog](docs/CONFIGURATION.md)
 - [Threat model and security boundaries](docs/THREAT_MODEL.md)
 - [Remote-only development](CONTRIBUTING.md)

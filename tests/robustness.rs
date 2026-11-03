@@ -66,7 +66,7 @@ proptest! {
         let text = format!("{prefix}\n{token}\n{prefix} {token}");
         let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
         let mut actual = Vec::new();
-        RULES.inspect_content("a.txt", &text, |finding| {
+        RULES.inspect_content("a.txt", text, |finding| {
             if finding.rule_id == "SEC002" { actual.push((finding.line, finding.column)); }
             true
         });
