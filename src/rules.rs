@@ -28,6 +28,7 @@ enum Scope {
 enum Detector {
     Content {
         regex: Regex,
+        prefilter: String,
         capture: usize,
         entropy: Option<f64>,
         unpinned: bool,
@@ -82,7 +83,7 @@ impl RulePack {
         let patterns: Vec<_> = indices
             .iter()
             .map(|i| match &rules[*i].detector {
-                Detector::Content { regex, .. } => regex.as_str(),
+                Detector::Content { prefilter, .. } => prefilter.as_str(),
                 _ => unreachable!(),
             })
             .collect();
@@ -129,6 +130,7 @@ impl RulePack {
                 entropy,
                 unpinned,
                 assigned,
+                ..
             } = &rule.detector
             else {
                 continue;
@@ -242,13 +244,14 @@ fn pack_digest(config: &Config, rules: &[Rule]) -> Result<String> {
         let detector = match &rule.detector {
             Detector::Content {
                 regex,
+                prefilter,
                 capture,
                 entropy,
                 unpinned,
                 assigned,
             } => json!({
-                "kind": "content", "pattern": regex.as_str(), "capture": capture,
-                "entropy": entropy, "unpinned": unpinned, "assigned": assigned,
+                "kind": "content", "pattern": regex.as_str(), "prefilter": prefilter,
+                "capture": capture, "entropy": entropy, "unpinned": unpinned, "assigned": assigned,
             }),
             Detector::Env => json!("env"),
             Detector::State => json!("state"),
@@ -339,6 +342,7 @@ fn pattern_rule(
         },
         detector: Detector::Content {
             regex,
+            prefilter: pattern.into(),
             capture: 0,
             entropy: None,
             unpinned: false,
@@ -643,6 +647,7 @@ fn builtins() -> Result<Vec<Rule>> {
     for (id, title, severity, category, remediation, pattern, scope) in definitions {
         let mut rule = pattern_rule(id, title, severity, category, remediation, pattern, scope)?;
         if let Detector::Content {
+            prefilter,
             capture,
             entropy,
             unpinned,
@@ -650,6 +655,11 @@ fn builtins() -> Result<Vec<Rule>> {
             ..
         } = &mut rule.detector
         {
+            // Built-in boundary assertions are not literal escapes or inside
+            // character classes. Removing them only broadens the shortlist;
+            // the original Unicode-aware regex still decides every finding.
+            // This avoids a RegexSet Unicode-boundary fallback on non-ASCII text.
+            *prefilter = pattern.replace(r"\b", "");
             if ["SEC008", "SEC009", "SEC012", "CI002"].contains(&id) {
                 *capture = 1;
             }
@@ -810,13 +820,14 @@ mod tests {
         let config = Config::default();
         let original = builtins().unwrap();
         let digest = pack_digest(&config, &original).unwrap();
-        for change in 0..6 {
+        for change in 0..7 {
             let mut rules = original.clone();
             if change == 0 {
                 rules[0].scope = Scope::Workflow;
             } else if change == 4 {
                 rules[0].detector = Detector::Permissions;
             } else if let Detector::Content {
+                prefilter,
                 capture,
                 entropy,
                 unpinned,
@@ -828,7 +839,8 @@ mod tests {
                     1 => *capture = 1,
                     2 => *entropy = Some(3.0),
                     3 => *unpinned = true,
-                    _ => *assigned = true,
+                    5 => *assigned = true,
+                    _ => prefilter.clear(),
                 }
             }
             assert_ne!(digest, pack_digest(&config, &rules).unwrap());
@@ -843,7 +855,71 @@ mod tests {
         assert!((shannon_entropy(b"abcd") - 2.0).abs() < 1e-10);
     }
 
+    static REFERENCE_PACKS: std::sync::LazyLock<(RulePack, RulePack)> =
+        std::sync::LazyLock::new(|| {
+            let optimized = RulePack::compile(&Config::default()).unwrap();
+            let mut reference = optimized.clone();
+            reference.prefilter = RegexSetBuilder::new(reference.indices.iter().map(|index| {
+                match &reference.rules[*index].detector {
+                    Detector::Content { regex, .. } => regex.as_str(),
+                    _ => unreachable!(),
+                }
+            }))
+            .size_limit(32 * 1024 * 1024)
+            .build()
+            .unwrap();
+            (optimized, reference)
+        });
+
+    #[test]
+    fn custom_unicode_boundaries_are_not_rewritten() {
+        let config = Config {
+            rules: vec![CustomRule {
+                id: "ORG001".into(),
+                title: "Unicode marker".into(),
+                remediation: "Review".into(),
+                severity: Severity::Low,
+                category: Category::Privacy,
+                pattern: r"\bλ\b".into(),
+                capture: 0,
+                min_entropy: None,
+                path: None,
+            }],
+            ..Config::default()
+        };
+        let pack = RulePack::compile(&config).unwrap();
+        let mut found = false;
+        assert!(pack.inspect_content("source.txt", " λ ", |finding| {
+            found |= finding.rule_id == "ORG001";
+            true
+        }));
+        assert!(found);
+    }
+
     proptest! {
+        #[test]
+        fn optimized_prefilter_preserves_unicode_findings_and_budgets(
+            prefix in proptest::collection::vec(any::<char>(), 0..256),
+            budget in 0usize..16,
+        ) {
+            let prefix: String = prefix.into_iter().collect();
+            let token = format!("ghp_{}", "A".repeat(36));
+            let text = format!("{prefix}\nλ{token} λ {token}\r\n{token}\n{prefix}");
+            let (optimized, reference) = &*REFERENCE_PACKS;
+            let mut actual = Vec::new();
+            let mut expected = Vec::new();
+            let complete = optimized.inspect_content("source.txt", &text, |finding| {
+                actual.push(finding);
+                actual.len() <= budget
+            });
+            let reference_complete = reference.inspect_content("source.txt", &text, |finding| {
+                expected.push(finding);
+                expected.len() <= budget
+            });
+            prop_assert_eq!(complete, reference_complete);
+            prop_assert_eq!(actual, expected);
+        }
+
         #[test]
         fn entropy_is_bounded(bytes in proptest::collection::vec(any::<u8>(), 0..4096)) {
             let entropy = shannon_entropy(&bytes);
