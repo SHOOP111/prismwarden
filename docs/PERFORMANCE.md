@@ -16,6 +16,33 @@ Each worker count (1, 2, 4) gets one warm-up and **five measured rounds with rot
 
 The optional `baseline_ref` workflow input checks out a trusted branch or **full 40-character commit SHA**, copies the exact current harness into it, and runs both versions on the same runner. Baseline measurements and commit identity are retained beside current results. The baseline must support the harness APIs/dependencies. These are sequential warm-cache measurements on a shared host, not causal performance proof or statistically independent confidence intervals.
 
+## Deep-audit measured result
+
+[GitHub run 41590770367](https://github.com/SHOOP111/prismwarden/actions/runs/41590770367) compared `24244a80101a86eed95c49c72225f3bfb662c1e7` against `d76659d73bb72fb7d7e8225d87b99c2befda6ead` using the identical current harness. Both versions completed all scans and detected every expected synthetic signal. Runner: Ubuntu hosted VM, 4 logical CPUs on AMD EPYC 7763, Rust 1.99.1.
+
+Representative end-to-end medians (seconds):
+
+| Corpus | Workers | Baseline | Reviewed code |
+|---|---:|---:|---:|
+| `large_low_hit` | 1 | 0.15062 | 0.15039 |
+| `large_low_hit` | 2 | 0.08435 | 0.08424 |
+| `large_low_hit` | 4 | 0.05894 | 0.05909 |
+| `tiny_files` | 2 | 0.02399 | 0.02414 |
+| `dense_findings` | 2 | 0.01655 | 0.01611 |
+| `entropy_rejects` | 2 | 0.03020 | 0.02925 |
+| `long_unicode_lines` | 1 | 2.22155 | 0.03583 |
+| `long_unicode_lines` | 2 | 1.10210 | 0.02620 |
+| `long_unicode_lines` | 4 | 0.92975 | 0.02706 |
+
+The Unicode-heavy workload improved by roughly **34–62×**, depending on worker count, after avoiding the combined regex-set Unicode-word-boundary fallback. Original Unicode-aware capture checks still decide findings; an optimized/reference property regression exercises Unicode adjacency and callback budgets. This is a workload-specific improvement, **not a general 34–62× scanner speedup**. Other measured workloads were essentially unchanged or showed small mixed differences on this shared runner; more workers did not reliably help tiny/dense corpora.
+
+Raw samples are retained in version control so evidence does not depend solely on expiring CI artifacts:
+
+- [Current measurements](benchmarks/deep-audit-current.json)
+- [Identical-harness baseline measurements](benchmarks/deep-audit-baseline.json)
+- [Runner environment and current commit](benchmarks/deep-audit-environment.txt)
+- [Baseline commit](benchmarks/deep-audit-baseline-commit.txt)
+
 ## Historical single-sample result
 
 The original, narrower harness was measured entirely on [GitHub Actions run 41509396044](https://github.com/SHOOP111/prismwarden/actions/runs/41509396044), commit `ffd3e54fdaac6d457c54340657488878334cf813`.

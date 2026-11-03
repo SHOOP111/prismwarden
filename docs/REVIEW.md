@@ -18,14 +18,15 @@ This is an engineering review, **not an external security certification or proof
 | Workflow inputs | Direct-expression matching missed fallback expressions and selected untrusted head-ref/commit fields | Extend CI005 with contextual positive/negative tests; findings remain lexical review prompts |
 | Baseline API | A caller could mark a truncated public report complete before converting it | Reject inconsistent notices/counters, unsupported report schemas, invalid fingerprints, and oversized baselines |
 | Rule-pack provenance | Detector scope/capture/entropy/pinning settings were not all bound explicitly | Length-framed v2 digest includes detector settings and kinds; finding identity remains v1 |
+| Unicode scanning | Combined Unicode word boundaries forced a very slow regex-set path on non-ASCII text | Broaden only built-in shortlists; preserve original capture regexes and custom patterns; optimized/reference property tests and measured workload-specific 34–62× improvement |
 | Aggregation | Full retention sets inserted and immediately removed known late-sorting candidates | Compare with retained maximum first; retain all observed severity accounting and deterministic results |
 | Artifact checksums | Entire files were loaded to hash, and every nested file named SHA256SUMS was skipped | Streaming hashing; exclude only the root manifest; deterministic LF output; reject symlinks and ambiguous checksum filenames |
 | License inventory | Packaging helpers lacked regression coverage and could silently miss declared license files or collide basenames | Testable helper API, explicit error handling, source/destination confinement, deterministic inventory, collision checks |
-| Workflow quality | Workflows were not linted; MSRV ran a type check only | Version-pinned actionlint with shell checks; full minimum-Rust and doctest execution |
+| Workflow quality | Workflows were not linted; MSRV ran a type check only; checkout/upload used deprecated Node 20 actions | Version-pinned actionlint with shell checks; full minimum-Rust and doctest execution; reviewed full-SHA Node 24 checkout/upload updates with no write-permission expansion |
 | SARIF conformance | Official-schema smoke test covered one ordinary successful result | Validate empty, finding-bearing, incomplete, and truncated scans; assert URI encoding, Unicode coordinates, exit codes, and redaction |
 | Benchmark credibility | One easy corpus and one increasing-order sample per thread count | Five corpora, warm-ups, five rotated samples, medians/ranges, full-report determinism checks, optional identical-harness baseline comparison |
 
-The new regressions live primarily in `tests/deep_audit.rs` and `.github/scripts/test_helpers.py`; existing tests remain in place. No production dependencies were added or broadly upgraded merely to generate churn.
+The new regressions live primarily in `tests/deep_audit.rs` and `.github/scripts/test_helpers.py`, with optimized/reference Unicode prefilter coverage in `src/rules.rs`; existing tests remain in place. No production dependencies were added or broadly upgraded merely to generate churn.
 
 ## Behavior and compatibility notes
 
@@ -37,7 +38,7 @@ The new regressions live primarily in `tests/deep_audit.rs` and `.github/scripts
 
 ## Validation evidence
 
-GitHub Actions is the only validation environment. Successful final runs and benchmark measurements are recorded here and in [PERFORMANCE.md](PERFORMANCE.md) after completion. Earlier failed runs are part of the feedback loop, not evidence of passing checks.
+GitHub Actions is the only validation environment. [CI run 41590766037](https://github.com/SHOOP111/prismwarden/actions/runs/41590766037) passed the complete Linux/Windows/macOS test/build/package matrix, Rust 1.88 tests, rustfmt, Clippy, rustdoc, official SARIF schema checks, repository self-audit, and workflow lint for the optimized engine. The synthetic comparison passed in [run 41590770367](https://github.com/SHOOP111/prismwarden/actions/runs/41590770367); raw samples and limitations are in [PERFORMANCE.md](PERFORMANCE.md). Earlier failed runs are part of the feedback loop, not evidence of passing checks. Final workflow modernization is checked again before delivery.
 
 ## Reviewed boundaries retained intentionally
 

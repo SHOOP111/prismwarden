@@ -1,0 +1,272 @@
+[
+  {
+    "corpus": "large_low_hit",
+    "threads": 1,
+    "files": 384,
+    "bytes": 52532208,
+    "findings": 24,
+    "samples_seconds": [
+      0.150936819,
+      0.151843298,
+      0.148646935,
+      0.15062029,
+      0.15036792
+    ],
+    "median_seconds": 0.15062029,
+    "min_seconds": 0.148646935,
+    "max_seconds": 0.151843298,
+    "median_mib_per_second": 332.61533060194574
+  },
+  {
+    "corpus": "large_low_hit",
+    "threads": 2,
+    "files": 384,
+    "bytes": 52532208,
+    "findings": 24,
+    "samples_seconds": [
+      0.084033299,
+      0.084620385,
+      0.083061441,
+      0.084633939,
+      0.084348799
+    ],
+    "median_seconds": 0.084348799,
+    "min_seconds": 0.083061441,
+    "max_seconds": 0.084633939,
+    "median_mib_per_second": 593.9458314481861
+  },
+  {
+    "corpus": "large_low_hit",
+    "threads": 4,
+    "files": 384,
+    "bytes": 52532208,
+    "findings": 24,
+    "samples_seconds": [
+      0.058937223,
+      0.058437763,
+      0.059840986,
+      0.05847938,
+      0.059922237
+    ],
+    "median_seconds": 0.058937223,
+    "min_seconds": 0.058437763,
+    "max_seconds": 0.059922237,
+    "median_mib_per_second": 850.0335611963078
+  },
+  {
+    "corpus": "tiny_files",
+    "threads": 1,
+    "files": 1024,
+    "bytes": 61056,
+    "findings": 64,
+    "samples_seconds": [
+      0.027896043,
+      0.027356558,
+      0.027056559,
+      0.029564831,
+      0.025970908
+    ],
+    "median_seconds": 0.027356558,
+    "min_seconds": 0.025970908,
+    "max_seconds": 0.029564831,
+    "median_mib_per_second": 2.128467297037149
+  },
+  {
+    "corpus": "tiny_files",
+    "threads": 2,
+    "files": 1024,
+    "bytes": 61056,
+    "findings": 64,
+    "samples_seconds": [
+      0.02437217,
+      0.023986442,
+      0.024789798,
+      0.02382971,
+      0.023804262
+    ],
+    "median_seconds": 0.023986442,
+    "min_seconds": 0.023804262,
+    "max_seconds": 0.024789798,
+    "median_mib_per_second": 2.4275188067700912
+  },
+  {
+    "corpus": "tiny_files",
+    "threads": 4,
+    "files": 1024,
+    "bytes": 61056,
+    "findings": 64,
+    "samples_seconds": [
+      0.026231142,
+      0.026872767,
+      0.026093355,
+      0.027561129,
+      0.025583696
+    ],
+    "median_seconds": 0.026231142,
+    "min_seconds": 0.025583696,
+    "max_seconds": 0.027561129,
+    "median_mib_per_second": 2.2197866590215556
+  },
+  {
+    "corpus": "dense_findings",
+    "threads": 1,
+    "files": 64,
+    "bytes": 86016,
+    "findings": 2048,
+    "samples_seconds": [
+      0.017333472,
+      0.017898233,
+      0.017147705,
+      0.016746478,
+      0.016982507
+    ],
+    "median_seconds": 0.017147705,
+    "min_seconds": 0.016746478,
+    "max_seconds": 0.017898233,
+    "median_mib_per_second": 4.783803430254952
+  },
+  {
+    "corpus": "dense_findings",
+    "threads": 2,
+    "files": 64,
+    "bytes": 86016,
+    "findings": 2048,
+    "samples_seconds": [
+      0.016756243,
+      0.015954914,
+      0.01667235,
+      0.016547237,
+      0.015619089
+    ],
+    "median_seconds": 0.016547237,
+    "min_seconds": 0.015619089,
+    "max_seconds": 0.016756243,
+    "median_mib_per_second": 4.957398627940121
+  },
+  {
+    "corpus": "dense_findings",
+    "threads": 4,
+    "files": 64,
+    "bytes": 86016,
+    "findings": 2048,
+    "samples_seconds": [
+      0.017661312,
+      0.017698421,
+      0.017965568,
+      0.017625915,
+      0.017134941
+    ],
+    "median_seconds": 0.017661312,
+    "min_seconds": 0.017134941,
+    "max_seconds": 0.017965568,
+    "median_mib_per_second": 4.644686079946949
+  },
+  {
+    "corpus": "long_unicode_lines",
+    "threads": 1,
+    "files": 96,
+    "bytes": 4722624,
+    "findings": 96,
+    "samples_seconds": [
+      2.221554317,
+      2.099595167,
+      2.166598577,
+      2.270951342,
+      2.237450664
+    ],
+    "median_seconds": 2.221554317,
+    "min_seconds": 2.099595167,
+    "max_seconds": 2.270951342,
+    "median_mib_per_second": 2.0273396785210136
+  },
+  {
+    "corpus": "long_unicode_lines",
+    "threads": 2,
+    "files": 96,
+    "bytes": 4722624,
+    "findings": 96,
+    "samples_seconds": [
+      1.132512566,
+      1.077158053,
+      1.102569335,
+      1.102095101,
+      1.1015750930000001
+    ],
+    "median_seconds": 1.102095101,
+    "min_seconds": 1.077158053,
+    "max_seconds": 1.132512566,
+    "median_mib_per_second": 4.0866212096915495
+  },
+  {
+    "corpus": "long_unicode_lines",
+    "threads": 4,
+    "files": 96,
+    "bytes": 4722624,
+    "findings": 96,
+    "samples_seconds": [
+      0.920629941,
+      0.928075327,
+      0.945877094,
+      0.933953583,
+      0.929750029
+    ],
+    "median_seconds": 0.929750029,
+    "min_seconds": 0.920629941,
+    "max_seconds": 0.945877094,
+    "median_mib_per_second": 4.844146355862872
+  },
+  {
+    "corpus": "entropy_rejects",
+    "threads": 1,
+    "files": 64,
+    "bytes": 704512,
+    "findings": 0,
+    "samples_seconds": [
+      0.043399983,
+      0.043427925,
+      0.043801701,
+      0.043227692,
+      0.043328289
+    ],
+    "median_seconds": 0.043399983,
+    "min_seconds": 0.043227692,
+    "max_seconds": 0.043801701,
+    "median_mib_per_second": 15.480996847395078
+  },
+  {
+    "corpus": "entropy_rejects",
+    "threads": 2,
+    "files": 64,
+    "bytes": 704512,
+    "findings": 0,
+    "samples_seconds": [
+      0.030634743,
+      0.0301174,
+      0.030612412,
+      0.030199773,
+      0.030180464
+    ],
+    "median_seconds": 0.030199773,
+    "min_seconds": 0.0301174,
+    "max_seconds": 0.030634743,
+    "median_mib_per_second": 22.247683782258893
+  },
+  {
+    "corpus": "entropy_rejects",
+    "threads": 4,
+    "files": 64,
+    "bytes": 704512,
+    "findings": 0,
+    "samples_seconds": [
+      0.029699302,
+      0.029483349,
+      0.02931197,
+      0.028944276,
+      0.030263983
+    ],
+    "median_seconds": 0.029483349,
+    "min_seconds": 0.028944276,
+    "max_seconds": 0.030263983,
+    "median_mib_per_second": 22.78828636461889
+  }
+]

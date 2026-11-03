@@ -1,0 +1,272 @@
+[
+  {
+    "corpus": "large_low_hit",
+    "threads": 1,
+    "files": 384,
+    "bytes": 52532208,
+    "findings": 24,
+    "samples_seconds": [
+      0.150569588,
+      0.151360572,
+      0.149180689,
+      0.15038285,
+      0.150390645
+    ],
+    "median_seconds": 0.150390645,
+    "min_seconds": 0.149180689,
+    "max_seconds": 0.151360572,
+    "median_mib_per_second": 333.12323086127424
+  },
+  {
+    "corpus": "large_low_hit",
+    "threads": 2,
+    "files": 384,
+    "bytes": 52532208,
+    "findings": 24,
+    "samples_seconds": [
+      0.083788868,
+      0.084176029,
+      0.08424043,
+      0.084925065,
+      0.084653413
+    ],
+    "median_seconds": 0.08424043,
+    "min_seconds": 0.083788868,
+    "max_seconds": 0.084925065,
+    "median_mib_per_second": 594.7098982485124
+  },
+  {
+    "corpus": "large_low_hit",
+    "threads": 4,
+    "files": 384,
+    "bytes": 52532208,
+    "findings": 24,
+    "samples_seconds": [
+      0.059441733,
+      0.059067815,
+      0.058845691,
+      0.059088341,
+      0.059940275
+    ],
+    "median_seconds": 0.059088341,
+    "min_seconds": 0.058845691,
+    "max_seconds": 0.059940275,
+    "median_mib_per_second": 847.859606579764
+  },
+  {
+    "corpus": "tiny_files",
+    "threads": 1,
+    "files": 1024,
+    "bytes": 61056,
+    "findings": 64,
+    "samples_seconds": [
+      0.026531166,
+      0.027089648,
+      0.026992056,
+      0.027384537,
+      0.027376322
+    ],
+    "median_seconds": 0.027089648,
+    "min_seconds": 0.026531166,
+    "max_seconds": 0.027384537,
+    "median_mib_per_second": 2.149438747321486
+  },
+  {
+    "corpus": "tiny_files",
+    "threads": 2,
+    "files": 1024,
+    "bytes": 61056,
+    "findings": 64,
+    "samples_seconds": [
+      0.024137285,
+      0.02424167,
+      0.023974672,
+      0.024238714,
+      0.023684
+    ],
+    "median_seconds": 0.024137285,
+    "min_seconds": 0.023684,
+    "max_seconds": 0.02424167,
+    "median_mib_per_second": 2.412348325940552
+  },
+  {
+    "corpus": "tiny_files",
+    "threads": 4,
+    "files": 1024,
+    "bytes": 61056,
+    "findings": 64,
+    "samples_seconds": [
+      0.026307569,
+      0.026763009,
+      0.027306962,
+      0.028762996,
+      0.028071107
+    ],
+    "median_seconds": 0.027306962,
+    "min_seconds": 0.026307569,
+    "max_seconds": 0.028762996,
+    "median_mib_per_second": 2.1323331047408347
+  },
+  {
+    "corpus": "dense_findings",
+    "threads": 1,
+    "files": 64,
+    "bytes": 86016,
+    "findings": 2048,
+    "samples_seconds": [
+      0.016971751,
+      0.017317084,
+      0.016457382,
+      0.016388252,
+      0.017091043
+    ],
+    "median_seconds": 0.016971751,
+    "min_seconds": 0.016388252,
+    "max_seconds": 0.017317084,
+    "median_mib_per_second": 4.833399335165829
+  },
+  {
+    "corpus": "dense_findings",
+    "threads": 2,
+    "files": 64,
+    "bytes": 86016,
+    "findings": 2048,
+    "samples_seconds": [
+      0.016308374,
+      0.015979641,
+      0.016113551,
+      0.016690947,
+      0.015712117
+    ],
+    "median_seconds": 0.016113551,
+    "min_seconds": 0.015712117,
+    "max_seconds": 0.016690947,
+    "median_mib_per_second": 5.090823866198083
+  },
+  {
+    "corpus": "dense_findings",
+    "threads": 4,
+    "files": 64,
+    "bytes": 86016,
+    "findings": 2048,
+    "samples_seconds": [
+      0.018477857,
+      0.01731473,
+      0.016840316,
+      0.017897616,
+      0.018116163
+    ],
+    "median_seconds": 0.017897616,
+    "min_seconds": 0.016840316,
+    "max_seconds": 0.018477857,
+    "median_mib_per_second": 4.583361828748588
+  },
+  {
+    "corpus": "long_unicode_lines",
+    "threads": 1,
+    "files": 96,
+    "bytes": 4722624,
+    "findings": 96,
+    "samples_seconds": [
+      0.035711083,
+      0.036314847,
+      0.035827409,
+      0.035555019,
+      0.036535718
+    ],
+    "median_seconds": 0.035827409,
+    "min_seconds": 0.035555019,
+    "max_seconds": 0.036535718,
+    "median_mib_per_second": 125.70948724881976
+  },
+  {
+    "corpus": "long_unicode_lines",
+    "threads": 2,
+    "files": 96,
+    "bytes": 4722624,
+    "findings": 96,
+    "samples_seconds": [
+      0.026372562,
+      0.025886517,
+      0.026393211,
+      0.026196855,
+      0.026204579
+    ],
+    "median_seconds": 0.026204579,
+    "min_seconds": 0.025886517,
+    "max_seconds": 0.026393211,
+    "median_mib_per_second": 171.87245079738736
+  },
+  {
+    "corpus": "long_unicode_lines",
+    "threads": 4,
+    "files": 96,
+    "bytes": 4722624,
+    "findings": 96,
+    "samples_seconds": [
+      0.027059141,
+      0.026379034,
+      0.027125234,
+      0.027760036,
+      0.02699436
+    ],
+    "median_seconds": 0.027059141,
+    "min_seconds": 0.026379034,
+    "max_seconds": 0.027760036,
+    "median_mib_per_second": 166.44450076385465
+  },
+  {
+    "corpus": "entropy_rejects",
+    "threads": 1,
+    "files": 64,
+    "bytes": 704512,
+    "findings": 0,
+    "samples_seconds": [
+      0.043489668,
+      0.045855844,
+      0.042750021,
+      0.04380203,
+      0.043556172
+    ],
+    "median_seconds": 0.043556172,
+    "min_seconds": 0.042750021,
+    "max_seconds": 0.045855844,
+    "median_mib_per_second": 15.425483212803918
+  },
+  {
+    "corpus": "entropy_rejects",
+    "threads": 2,
+    "files": 64,
+    "bytes": 704512,
+    "findings": 0,
+    "samples_seconds": [
+      0.029614339,
+      0.02852979,
+      0.028824198,
+      0.029245041,
+      0.030023091
+    ],
+    "median_seconds": 0.029245041,
+    "min_seconds": 0.02852979,
+    "max_seconds": 0.030023091,
+    "median_mib_per_second": 22.97398044338526
+  },
+  {
+    "corpus": "entropy_rejects",
+    "threads": 4,
+    "files": 64,
+    "bytes": 704512,
+    "findings": 0,
+    "samples_seconds": [
+      0.028100059,
+      0.029097537,
+      0.027911898,
+      0.02878285,
+      0.029478476
+    ],
+    "median_seconds": 0.02878285,
+    "min_seconds": 0.027911898,
+    "max_seconds": 0.029478476,
+    "median_mib_per_second": 23.342893424382922
+  }
+]
