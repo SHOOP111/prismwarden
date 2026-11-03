@@ -1,7 +1,7 @@
-use crate::config::{Config, CustomRule};
+use crate::config::{Config, CustomRule, path_glob};
 use crate::model::{Category, Finding, Severity, fingerprint};
 use anyhow::{Result, ensure};
-use globset::{Glob, GlobMatcher};
+use globset::GlobMatcher;
 use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -15,7 +15,8 @@ pub struct RuleInfo {
     pub remediation: String,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
 enum Scope {
     Any,
     Workflow,
@@ -69,17 +70,9 @@ impl RulePack {
                 rule.info.severity = *severity;
             }
         }
-        let mut digest = blake3::Hasher::new_derive_key("prismwarden.rulepack.v1");
-        digest.update(env!("CARGO_PKG_VERSION").as_bytes());
-        digest.update(&serde_json::to_vec(config)?);
-        for rule in &rules {
-            digest.update(&serde_json::to_vec(&rule.info)?);
-            if let Detector::Content { regex, .. } = &rule.detector {
-                digest.update(regex.as_str().as_bytes());
-            }
-        }
-        rules.retain(|r| !config.disable_rules.contains(&r.info.id));
         rules.sort_by(|a, b| a.info.id.cmp(&b.info.id));
+        let digest = pack_digest(config, &rules)?;
+        rules.retain(|r| !config.disable_rules.contains(&r.info.id));
         let indices: Vec<_> = rules
             .iter()
             .enumerate()
@@ -101,7 +94,7 @@ impl RulePack {
             prefilter,
             indices,
             known,
-            digest: digest.finalize().to_hex().to_string(),
+            digest,
         })
     }
 
@@ -140,7 +133,7 @@ impl RulePack {
             };
             // Captures are monotonic within one rule. Advance a Unicode cursor
             // once instead of building a line index or rescanning long lines.
-            let (mut offset, mut line, mut column) = (0, 1, 1);
+            let (mut offset, mut line, mut column, mut previous_cr) = (0, 1, 1, false);
             for captures in regex.captures_iter(text) {
                 attempts += 1;
                 if attempts > 32_768 {
@@ -163,12 +156,18 @@ impl RulePack {
                     continue;
                 }
                 for ch in text[offset..matched.start()].chars() {
-                    if ch == '\n' {
-                        line += 1;
-                        column = 1;
-                    } else {
-                        column += 1;
+                    match ch {
+                        '\r' => {
+                            line += 1;
+                            column = 1;
+                        }
+                        '\n' => {
+                            line += usize::from(!previous_cr);
+                            column = 1;
+                        }
+                        _ => column += 1,
                     }
+                    previous_cr = ch == '\r';
                 }
                 offset = matched.start();
                 let finding = rule.finding(path, line, column, value.as_bytes());
@@ -217,6 +216,40 @@ impl RulePack {
         }
         true
     }
+}
+
+/// Length-framed diagnostic provenance, including non-regex detector settings.
+/// This is not a code signature; retain the artifact's commit for exact identity.
+fn pack_digest(config: &Config, rules: &[Rule]) -> Result<String> {
+    use serde_json::json;
+    let mut digest = blake3::Hasher::new_derive_key("prismwarden.rulepack.v2");
+    for part in [
+        env!("CARGO_PKG_VERSION").as_bytes().to_vec(),
+        serde_json::to_vec(config)?,
+    ] {
+        digest.update(&(part.len() as u64).to_le_bytes());
+        digest.update(&part);
+    }
+    for rule in rules {
+        let detector = match &rule.detector {
+            Detector::Content { regex, capture, entropy, unpinned } => json!({
+                "kind": "content", "pattern": regex.as_str(), "capture": capture,
+                "entropy": entropy, "unpinned": unpinned,
+            }),
+            Detector::Env => json!("env"),
+            Detector::State => json!("state"),
+            Detector::DesktopMetadata => json!("desktop_metadata"),
+            Detector::KeyStore => json!("key_store"),
+            Detector::Permissions => json!("permissions"),
+        };
+        let part = serde_json::to_vec(&json!({
+            "info": rule.info, "scope": rule.scope, "detector": detector,
+            "path_globs": "literal-separator/backslash-escape",
+        }))?;
+        digest.update(&(part.len() as u64).to_le_bytes());
+        digest.update(&part);
+    }
+    Ok(digest.finalize().to_hex().to_string())
 }
 
 impl Rule {
@@ -360,7 +393,7 @@ fn compile_custom(custom: &CustomRule) -> Result<Rule> {
         .path
         .as_ref()
         .map(|p| {
-            Glob::new(p)
+            path_glob(p)
                 .map(|g| g.compile_matcher())
                 .map_err(|_| anyhow::anyhow!("invalid custom rule path glob"))
         })
@@ -453,7 +486,7 @@ fn builtins() -> Result<Vec<Rule>> {
             High,
             Secret,
             rotate,
-            r#"(?im)^[ \t]*(?:export[ \t]+|[-{][ \t]*)?["']?(?:[A-Za-z0-9_]*(?:password|passwd|api_key|api_secret|access_token|auth_token|client_secret|secret_key))["']?[ \t]*[:=][ \t]*["']?([A-Za-z0-9/+_=.!@#$%^&*\-]{16,160})"#,
+            r#"(?im)(?:^[ \t]*(?:(?:export|const|let|var)[ \t]+|-[ \t]*)?|[,{][ \t]*)["']?(?:[A-Za-z0-9_.-]*(?:password|passwd|api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token|client[_-]?secret|secret[_-]?key|aws_secret_access_key))["']?[ \t]*[:=][ \t]*["']?([A-Za-z0-9/+_=.!@#$%^&*\-]{16,160})"#,
             Any,
         ),
         (
@@ -525,7 +558,7 @@ fn builtins() -> Result<Vec<Rule>> {
             High,
             Automation,
             "Pass untrusted event data through an environment variable and quote it. Check whether this expression reaches a shell or another interpreter.",
-            r"\$\{\{[ \t]*github\.event\.(?:issue|pull_request|comment|discussion)\.(?:title|body|head\.ref)[ \t]*\}\}",
+            r"\$\{\{[ \t]*(?:github\.head_ref\b|github\.event\.(?:(?:issue|pull_request|comment|discussion)\.(?:title|body|head\.(?:ref|label))|(?:head_commit|commits\[[^\]\r\n]{1,32}\])\.(?:message|author\.(?:name|email))))\b",
             Workflow,
         ),
         (
@@ -739,6 +772,29 @@ mod tests {
         assert!(!is_pinned_action("owner/action@v4"));
         assert!(!is_pinned_action("docker://image:latest"));
         assert!(!is_pinned_action("owner/action@abc123"));
+    }
+
+    #[test]
+    fn digest_binds_scope_capture_entropy_and_pinning() {
+        let config = Config::default();
+        let original = builtins().unwrap();
+        let digest = pack_digest(&config, &original).unwrap();
+        for change in 0..5 {
+            let mut rules = original.clone();
+            if change == 0 {
+                rules[0].scope = Scope::Workflow;
+            } else if change == 4 {
+                rules[0].detector = Detector::Permissions;
+            } else if let Detector::Content { capture, entropy, unpinned, .. } = &mut rules[0].detector {
+                match change {
+                    1 => *capture = 1,
+                    2 => *entropy = Some(3.0),
+                    _ => *unpinned = true,
+                }
+            }
+            assert_ne!(digest, pack_digest(&config, &rules).unwrap());
+        }
+        assert_eq!(digest, pack_digest(&config, &original).unwrap());
     }
 
     #[test]

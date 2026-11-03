@@ -30,6 +30,8 @@ const PRUNED: &[&str] = &[
 pub struct ScanOptions {
     pub root: PathBuf,
     pub include_ignored: bool,
+    /// Bypass all target-controlled ignore files; explicit policy/pruning remain.
+    pub no_ignore: bool,
     pub threads: usize,
     pub max_file_bytes: u64,
     pub max_total_bytes: u64,
@@ -42,6 +44,7 @@ impl Default for ScanOptions {
         Self {
             root: PathBuf::from("."),
             include_ignored: false,
+            no_ignore: false,
             threads: std::thread::available_parallelism().map_or(1, |n| n.get().min(8)),
             max_file_bytes: 2 * 1024 * 1024,
             max_total_bytes: 256 * 1024 * 1024,
@@ -94,10 +97,18 @@ impl Accumulator {
                 .entry(finding.severity.to_string())
                 .or_insert(0) += 1;
             self.highest_severity = self.highest_severity.max(Some(finding.severity));
-            self.findings.insert(finding);
-            if self.findings.len() > self.limit {
-                self.findings.pop_last();
+            // Once full, late-sorting findings need no tree-node allocation.
+            // Severity accounting still covers every observed finding.
+            if self.findings.len() == self.limit
+                && self.findings.last().is_some_and(|last| &finding > last)
+            {
                 self.statistics.findings_omitted += 1;
+            } else {
+                self.findings.insert(finding);
+                if self.findings.len() > self.limit {
+                    self.findings.pop_last();
+                    self.statistics.findings_omitted += 1;
+                }
             }
         }
     }
@@ -185,7 +196,8 @@ pub fn scan(options: &ScanOptions, config: &Config, baseline: &Baseline) -> Resu
         rulepack_digest: rules.digest.clone(),
         complete: accumulator.statistics.coverage_notices == 0,
         scope: ScanScope {
-            include_gitignored: options.include_ignored,
+            include_gitignored: options.include_ignored || options.no_ignore,
+            no_ignore: options.no_ignore,
             excluded_globs: config.exclude.clone(),
             disabled_rules: config.disable_rules.iter().cloned().collect(),
             allowlist_entries: config.allow.len(),
@@ -218,6 +230,10 @@ fn discover(
     }
     let excluded = Arc::new(AtomicU64::new(0));
     let excluded_entries = Arc::clone(&excluded);
+    #[cfg(windows)]
+    let filtered_links = Arc::new(AtomicU64::new(0));
+    #[cfg(windows)]
+    let filtered_link_entries = Arc::clone(&filtered_links);
     let excludes = policy.excludes.clone();
     let filter_root = root.to_path_buf();
     let mut walker = WalkBuilder::new(root);
@@ -227,15 +243,23 @@ fn discover(
         .parents(false)
         .ignore(false)
         .git_global(false)
-        .git_ignore(!options.include_ignored)
-        .git_exclude(!options.include_ignored)
+        .git_ignore(!options.include_ignored && !options.no_ignore)
+        .git_exclude(!options.include_ignored && !options.no_ignore)
         .require_git(false)
         .max_depth(Some(MAX_DEPTH))
-        .add_custom_ignore_filename(".prismwardenignore")
         .sort_by_file_path(|a, b| a.cmp(b))
         .filter_entry(move |entry| {
             if entry.depth() == 0 {
                 return true;
+            }
+            // Some Windows reparse points look like directories to the walker.
+            // Reject them before descent, not only when consuming yielded entries.
+            #[cfg(windows)]
+            if entry.file_type().is_some_and(|kind| kind.is_dir())
+                && fs::symlink_metadata(entry.path()).is_ok_and(|metadata| is_link(&metadata))
+            {
+                filtered_link_entries.fetch_add(1, Ordering::Relaxed);
+                return false;
             }
             if entry.file_type().is_some_and(|kind| kind.is_dir())
                 && entry
@@ -252,6 +276,9 @@ fn discover(
             }
             true
         });
+    if !options.no_ignore {
+        walker.add_custom_ignore_filename(".prismwardenignore");
+    }
     let mut work = Vec::new();
     let mut reserved = 0u64;
     for entry in walker.build() {
@@ -319,6 +346,10 @@ fn discover(
         });
     }
     accumulator.statistics.excluded_by_policy += excluded.load(Ordering::Relaxed);
+    #[cfg(windows)]
+    {
+        accumulator.statistics.symlinks_skipped += filtered_links.load(Ordering::Relaxed);
+    }
     accumulator.statistics.files_scheduled = work.len() as u64;
     work
 }

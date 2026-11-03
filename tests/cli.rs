@@ -114,6 +114,20 @@ fn scan_does_not_auto_load_a_policy_from_the_target() {
 }
 
 #[test]
+fn no_ignore_is_an_explicit_cli_scope_change() {
+    let dir = TempDir::new().unwrap();
+    seed(&dir);
+    fs::write(dir.path().join(".prismwardenignore"), "key.txt\n").unwrap();
+    assert_eq!(cli(&dir, &["scan"]).status.code(), Some(0));
+    assert_eq!(cli(&dir, &["scan", "--include-ignored"]).status.code(), Some(0));
+    let output = cli(&dir, &["scan", "--no-ignore", "--format", "json"]);
+    assert_eq!(output.status.code(), Some(1));
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["scope"]["no_ignore"], true);
+    assert_eq!(report["scope"]["include_gitignored"], true);
+}
+
+#[test]
 fn output_is_atomic_and_stdout_stays_empty() {
     let dir = TempDir::new().unwrap();
     seed(&dir);

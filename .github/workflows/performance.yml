@@ -2,6 +2,11 @@ name: Synthetic performance
 
 on:
   workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Optional trusted commit or branch to measure with the same harness
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -27,8 +32,24 @@ jobs:
           lscpu >> .prismwarden/performance/environment.txt
           rustc --version >> .prismwarden/performance/environment.txt
           git rev-parse HEAD >> .prismwarden/performance/environment.txt
-      - name: Measure generated corpus, including setup and discovery per scan
+      - name: Measure five generated corpora with warm-ups and repeated rotated samples
         run: cargo run --locked --release --example throughput > .prismwarden/performance/measurements.json
+      - name: Check out optional baseline
+        if: inputs.baseline_ref != ''
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.baseline_ref }}
+          path: .prismwarden/baseline
+      - name: Copy identical benchmark harness and record baseline identity
+        if: inputs.baseline_ref != ''
+        run: |
+          cp examples/throughput.rs .prismwarden/baseline/examples/throughput.rs
+          git -C .prismwarden/baseline rev-parse HEAD > .prismwarden/performance/baseline-commit.txt
+      - name: Measure optional baseline on the same runner
+        if: inputs.baseline_ref != ''
+        working-directory: .prismwarden/baseline
+        run: cargo run --locked --release --example throughput > ../performance/baseline-measurements.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: synthetic-performance

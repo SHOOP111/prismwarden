@@ -28,15 +28,27 @@ impl Baseline {
     }
 
     pub fn from_report(report: &Report) -> Result<Self> {
-        ensure!(report.complete, "refusing to baseline an incomplete scan");
-        Ok(Self {
+        ensure!(
+            report.schema_version == SCHEMA_VERSION,
+            "unsupported report schema"
+        );
+        ensure!(
+            report.complete
+                && report.statistics.coverage_notices == 0
+                && report.statistics.findings_omitted == 0
+                && report.notices.is_empty(),
+            "refusing to baseline an incomplete or inconsistent scan"
+        );
+        let baseline = Self {
             schema_version: SCHEMA_VERSION,
             fingerprints: report
                 .findings
                 .iter()
                 .map(|f| f.fingerprint.clone())
                 .collect(),
-        })
+        };
+        baseline.validate()?;
+        Ok(baseline)
     }
 
     pub fn load(path: &Path) -> Result<Self> {

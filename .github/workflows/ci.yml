@@ -9,11 +9,27 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  workflows:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install version-pinned actionlint on GitHub
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      - name: Validate workflow expressions and shell commands
+        run: '"$(go env GOPATH)/bin/actionlint" -color'
+
   quality:
     name: Formatting, Clippy, docs, SARIF
     runs-on: ubuntu-latest
@@ -91,6 +107,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Distribution helper unit tests
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py' -v
       - name: Unit, integration, property, and CLI tests
         run: cargo test --locked --all-targets --all-features
       - name: Documentation tests
@@ -135,4 +153,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           key: msrv
-      - run: cargo check --locked --all-targets
+      - name: Unit, integration, property, CLI, and example tests on MSRV
+        run: cargo test --locked --all-targets --all-features
+      - name: Documentation tests on MSRV
+        run: cargo test --locked --doc

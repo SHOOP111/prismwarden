@@ -64,13 +64,14 @@ proptest! {
         let prefix: String = prefix.into_iter().collect();
         let token = format!("ghp_{}", "A".repeat(36));
         let text = format!("{prefix}\n{token}\n{prefix} {token}");
+        let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
         let mut actual = Vec::new();
         RULES.inspect_content("a.txt", &text, |finding| {
             if finding.rule_id == "SEC002" { actual.push((finding.line, finding.column)); }
             true
         });
         let expected: Vec<_> = text.match_indices(&token).map(|(offset, _)| {
-            let before = &text[..offset];
+            let before = text[..offset].replace("\r\n", "\n").replace('\r', "\n");
             let line = before.bytes().filter(|b| *b == b'\n').count() + 1;
             let column = before.rsplit('\n').next().unwrap().chars().count() + 1;
             (line, column)

@@ -74,6 +74,9 @@ struct Input {
     /// Include gitignored files; .prismwardenignore and hard-pruned directories still apply.
     #[arg(long)]
     include_ignored: bool,
+    /// Bypass all target ignore files, including .prismwardenignore. Policy exclusions and hard pruning remain.
+    #[arg(long)]
+    no_ignore: bool,
     #[arg(long)]
     threads: Option<usize>,
     #[arg(long, default_value_t = 2 * 1024 * 1024)]
@@ -112,6 +115,7 @@ impl Input {
         ScanOptions {
             root: self.path.clone(),
             include_ignored: self.include_ignored,
+            no_ignore: self.no_ignore,
             threads: self
                 .threads
                 .unwrap_or_else(|| ScanOptions::default().threads),

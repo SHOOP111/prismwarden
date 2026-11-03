@@ -1,7 +1,7 @@
 use crate::file_io;
 use crate::model::{Category, Severity};
-use anyhow::{Context, Result, bail, ensure};
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use anyhow::{Context, Result, ensure};
+use globset::{Glob, GlobBuilder, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -90,12 +90,21 @@ impl Config {
         }
         for entry in &self.allow {
             ensure!(
-                entry.reason.len() <= 1024,
-                "allowlist reason exceeds 1024 bytes"
+                !entry.reason.trim().is_empty() && entry.reason.len() <= 1024,
+                "allowlist reasons must contain 1-1024 bytes of nonblank text"
             );
         }
         Ok(())
     }
+}
+
+/// Policy paths use `/` on every platform. `*` never crosses a directory;
+/// `**` is recursive and backslash always escapes glob metacharacters.
+pub(crate) fn path_glob(pattern: &str) -> std::result::Result<Glob, globset::Error> {
+    GlobBuilder::new(pattern)
+        .literal_separator(true)
+        .backslash_escape(true)
+        .build()
 }
 
 pub struct Policy {
@@ -119,15 +128,12 @@ impl Policy {
         }
         let mut builder = GlobSetBuilder::new();
         for pattern in &config.exclude {
-            builder.add(Glob::new(pattern).map_err(|_| anyhow::anyhow!("invalid exclusion glob"))?);
+            builder.add(path_glob(pattern).map_err(|_| anyhow::anyhow!("invalid exclusion glob"))?);
         }
         let mut allow: BTreeMap<String, GlobSetBuilder> = BTreeMap::new();
         for entry in &config.allow {
-            if entry.reason.trim().is_empty() {
-                bail!("every allowlist entry requires a nonempty reason");
-            }
             let glob =
-                Glob::new(&entry.path).map_err(|_| anyhow::anyhow!("invalid allowlist glob"))?;
+                path_glob(&entry.path).map_err(|_| anyhow::anyhow!("invalid allowlist glob"))?;
             allow
                 .entry(entry.rule.clone())
                 .or_insert_with(GlobSetBuilder::new)

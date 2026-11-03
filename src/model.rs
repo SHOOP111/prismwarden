@@ -87,6 +87,8 @@ pub struct Correlation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanScope {
     pub include_gitignored: bool,
+    #[serde(default)]
+    pub no_ignore: bool,
     pub excluded_globs: Vec<String>,
     pub disabled_rules: Vec<String>,
     pub allowlist_entries: usize,
